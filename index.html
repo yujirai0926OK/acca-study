@@ -22,7 +22,7 @@
   body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
     background:var(--bg); color:var(--ink); line-height:1.6; padding-bottom:env(safe-area-inset-bottom);}
   header{position:sticky; top:0; z-index:10; background:linear-gradient(135deg,var(--teal),var(--teal2));
-    color:#fff; padding:14px 16px calc(14px + env(safe-area-inset-top)); padding-top:max(14px,env(safe-area-inset-top));}
+    color:#fff; padding:14px 16px; padding-top:max(14px,env(safe-area-inset-top));}
   header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:.2px;}
   header p{margin:2px 0 0; font-size:12px; opacity:.85;}
   nav{display:flex; gap:4px; background:var(--card); position:sticky; top:0; z-index:9;
@@ -49,11 +49,13 @@
   button.btn.ghost{background:transparent; color:var(--sub); border:1px solid var(--line);}
   button.btn.bad{background:#fde8e8; color:var(--bad);}
   button.btn.good{background:#e6f5ec; color:var(--good);}
-  .row{display:flex; gap:8px; flex-wrap:wrap;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   textarea,input,select{width:100%; font:inherit; padding:10px; border:1px solid var(--line);
     border-radius:10px; background:var(--card); color:var(--ink);}
-  textarea{min-height:120px; resize:vertical;}
+  textarea{min-height:110px; resize:vertical;}
   .field{margin:8px 0;}
+  .search{margin:0 0 12px;}
+  .search input{background:var(--card);}
   /* flashcard */
   #fcWrap{text-align:center;}
   .flash{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:30px 18px;
@@ -83,6 +85,9 @@
   .note{font-size:12px; color:var(--sub); background:var(--chip); border-radius:10px; padding:10px 12px; margin-top:10px;}
   h2.vh{font-size:16px; margin:2px 0 12px;}
   details summary{cursor:pointer; font-weight:700; color:var(--teal); font-size:14px;}
+  .pcard summary{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .pcard .ptitle{color:var(--teal);}
+  .pbtns{display:flex; gap:6px; margin:10px 0;}
 </style>
 </head>
 <body>
@@ -99,15 +104,24 @@
 <main>
   <!-- READER -->
   <section id="reader" class="view active">
-    <div class="note">各セクションの<b>英日の要点</b>です（学習用の要約）。本文そのものは下の「マイ対訳」にご自身の教材から貼り付けると、左右対訳で保存できます。</div>
     <div id="secList"></div>
-    <div class="card">
-      <p class="sec-title">✍️ マイ対訳（自分の本文を貼り付け）<span class="en">Paste your own English / Japanese here — saved on this device</span></p>
-      <div class="field"><span class="lbl">English</span><textarea id="myEn" placeholder="英語本文をここに貼り付け"></textarea></div>
-      <div class="field"><span class="lbl">日本語</span><textarea id="myJa" placeholder="日本語訳をここに貼り付け"></textarea></div>
-      <div class="row"><button class="btn" id="saveMy">保存</button><button class="btn sec" id="speakMy">🔊 英語を読み上げ</button><span class="muted" id="mySaved"></span></div>
-      <div id="myView" class="bi" style="margin-top:12px;"></div>
+
+    <h2 class="vh">📚 マイ対訳（保存した対訳の本棚）</h2>
+    <div class="note">英語をチャットでClaudeに訳してもらい、英語と日本語をここに保存。タイトルを付けて何件でも貯められます。本文は<b>この端末内だけ</b>に保存されます（公開されません）。</div>
+
+    <div class="search">
+      <input id="passageSearch" placeholder="🔍 タイトル・本文で検索">
     </div>
+
+    <details id="addPassageBox" class="card">
+      <summary id="addPassageSummary">＋ 新しい対訳を追加</summary>
+      <div class="field"><span class="lbl">タイトル</span><input id="pTitle" placeholder="例: 第1章 §2 財務諸表の利用者"></div>
+      <div class="field"><span class="lbl">English</span><textarea id="pEn" placeholder="英語本文を貼り付け"></textarea></div>
+      <div class="field"><span class="lbl">日本語</span><textarea id="pJa" placeholder="日本語訳を貼り付け"></textarea></div>
+      <div class="row"><button class="btn" id="savePassage">保存</button><button class="btn ghost" id="cancelEdit" style="display:none">編集をやめる</button></div>
+    </details>
+
+    <div id="passageList"></div>
   </section>
 
   <!-- FLASHCARDS -->
@@ -150,12 +164,27 @@
 
   <!-- QUIZ -->
   <section id="quiz" class="view">
-    <h2 class="vh">確認テスト（第1章）</h2>
+    <h2 class="vh">確認テスト（第1章＋自作問題）</h2>
     <div id="quizList"></div>
     <div class="card" id="quizScore" style="text-align:center; display:none;">
       <p class="sec-title" style="justify-content:center;">スコア</p>
       <p id="scoreText" style="font-size:24px; font-weight:800; margin:4px 0;"></p>
       <button class="btn sec" id="retry">もう一度</button>
+    </div>
+    <div class="card">
+      <details>
+        <summary>＋ 自分で問題を追加（4択）</summary>
+        <div class="field"><span class="lbl">問題文</span><input id="qQ" placeholder="例: 継続企業の前提とは？"></div>
+        <div class="field"><span class="lbl">選択肢1</span><input id="qO1"></div>
+        <div class="field"><span class="lbl">選択肢2</span><input id="qO2"></div>
+        <div class="field"><span class="lbl">選択肢3</span><input id="qO3"></div>
+        <div class="field"><span class="lbl">選択肢4</span><input id="qO4"></div>
+        <div class="field"><span class="lbl">正解の番号</span>
+          <select id="qA"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+        </div>
+        <div class="field"><span class="lbl">解説（任意）</span><input id="qEx" placeholder="なぜその答えか"></div>
+        <button class="btn" id="addQuiz">問題を追加</button>
+      </details>
     </div>
   </section>
 
@@ -164,7 +193,7 @@
     <h2 class="vh">データ管理・バックアップ</h2>
     <div class="card">
       <p class="sec-title">書き出し / 読み込み<span class="en">PCとiPadの同期・バックアップに</span></p>
-      <p class="muted">進捗と単語をファイル（JSON）に書き出せます。OneDriveに保存しておけば、別の端末で読み込んで同期できます。</p>
+      <p class="muted">進捗・単語・対訳・自作問題をファイル（JSON）に書き出せます。別の端末で読み込んで同期できます。</p>
       <div class="row">
         <button class="btn" id="exp">⬇️ 書き出し</button>
         <label class="btn sec" style="cursor:pointer;">⬆️ 読み込み<input type="file" id="imp" accept="application/json" hidden></label>
@@ -174,15 +203,14 @@
       <p class="sec-title">メンテナンス</p>
       <div class="row">
         <button class="btn ghost" id="mergeSeed">最新の収録単語を取り込む</button>
-        <button class="btn bad" id="resetProg">進捗だけリセット</button>
+        <button class="btn bad" id="resetProg">単語の進捗だけリセット</button>
       </div>
       <p class="muted" id="dataStat" style="margin-top:10px;"></p>
     </div>
     <div class="note">
-      <b>iPad / iPhone で使うには</b><br>
-      ① このファイルをOneDriveに置く → ファイルアプリ／ブラウザで開く<br>
-      ② Safariで開き、共有ボタン →「ホーム画面に追加」でアプリ化（オフライン可・進捗が消えにくい）<br>
-      <b>注意：</b>ブラウザ保存の進捗は、長期間開かないと消えることがあります。ときどき「書き出し」でバックアップしてください。
+      <b>iPhone / iPad で使うには</b><br>
+      Safariで開く → 共有ボタン →「ホーム画面に追加」でアプリ化（オフライン可・進捗が消えにくい）<br>
+      <b>注意：</b>進捗はブラウザに保存。ときどき「書き出し」でバックアップを。
     </div>
   </section>
 </main>
@@ -211,7 +239,7 @@ const SEED_WORDS = [
  ["notes to the financial statements","注記","会計方針やその他の開示で財務諸表を補足する説明。","The notes include the accounting policies."],
  ["asset","資産","過去の事象の結果として企業が支配する現在の経済的資源。","A building used in operations is an asset."],
  ["liability","負債","過去の事象の結果として生じた、経済的資源を引き渡す現在の義務。","A bank loan is a liability."],
- ["equity","資本（持分）","資産から負債を差し引いた残余持分。","Equity = assets − liabilities."],
+ ["equity","資本（持分）","資産から負債を差し引いた残余持分。","Equity = assets minus liabilities."],
  ["income","収益","資本の増加につながる資産の増加・負債の減少（出資を除く）。","Sales generate income."],
  ["expense","費用","資本の減少につながる資産の減少・負債の増加（分配を除く）。","Buying services creates an expense."],
  ["IFRS Accounting Standards","IFRS会計基準","各国の財務諸表作成の差異を減らすための国際的な会計基準。","IFRS Accounting Standards promote comparability."],
@@ -266,7 +294,7 @@ const SECTIONS = [
   pts_en:["Fundamental: relevance (predictive/confirmatory value) and faithful representation (complete, neutral, free from error).","Enhancing: comparability, verifiability, timeliness, understandability.","Materiality is a threshold quality affecting relevance."]},
  {n:"6", ja:"財務諸表の構成要素", en:"Elements of the financial statements",
   pts_ja:["資産：過去の事象の結果として企業が支配する現在の経済的資源。","負債：経済的資源を引き渡す現在の義務。","資本：資産−負債の残余持分。","収益：出資以外で資本を増やす資産増・負債減。","費用：分配以外で資本を減らす資産減・負債増。","資産・負債は使用期間で流動／固定に分類。"],
-  pts_en:["Asset: a present economic resource controlled as a result of past events.","Liability: a present obligation to transfer an economic resource.","Equity: the residual interest (assets − liabilities).","Income and expenses change equity, excluding owner contributions/distributions."]},
+  pts_en:["Asset: a present economic resource controlled as a result of past events.","Liability: a present obligation to transfer an economic resource.","Equity: the residual interest (assets minus liabilities).","Income and expenses change equity, excluding owner contributions/distributions."]},
  {n:"7", ja:"財務諸表の構成", en:"Components of a set of financial statements",
   pts_ja:["IFRS 18に基づき、財務諸表一式は次から成る：財政状態計算書／損益及びその他の包括利益計算書／株主資本等変動計算書／キャッシュフロー計算書／注記。","資産・負債は流動／固定に分類（12か月基準）。","費用は機能別（売上原価・販売費・管理費）または性質別に分類できる。","その他の包括利益の代表例は再評価剰余金。"],
   pts_en:["A set of statements comprises: SOFP, statement of P/L and OCI, statement of changes in equity, statement of cash flows, and notes.","Assets/liabilities are split current/non-current on a 12-month basis.","Expenses may be classified by function or by nature."]},
@@ -309,12 +337,20 @@ const QUIZ = [
 const KEY="accaStudy.v1";
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return {};} }
 function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
-let state = load();
 function freshWord(w){ return {en:w[0],ja:w[1],def:w[2]||"",ex:w[3]||"",ch:"1",box:1,due:0}; }
-if(!state.words){ state.words = SEED_WORDS.map(freshWord); }
-if(state.my===undefined){ state.my={en:"",ja:""}; }
-if(state.rate===undefined){ state.rate=0.95; }
-if(state.autoSpeak===undefined){ state.autoSpeak=true; }
+function uid(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function normalize(s){
+  if(!s.words){ s.words = SEED_WORDS.map(freshWord); }
+  if(!s.passages){
+    s.passages = [];
+    if(s.my && (s.my.en || s.my.ja)){ s.passages.push({id:uid(), title:"以前のマイ対訳", en:s.my.en||"", ja:s.my.ja||""}); }
+  }
+  if(!s.quizCustom){ s.quizCustom = []; }
+  if(s.rate===undefined){ s.rate = 0.95; }
+  if(s.autoSpeak===undefined){ s.autoSpeak = true; }
+  return s;
+}
+let state = normalize(load());
 save(state);
 
 /* ========== speech (Web Speech API: 無料・オフライン) ========== */
@@ -347,8 +383,9 @@ document.querySelectorAll("nav button").forEach(b=>{
   };
 });
 
-/* ========== reader ========== */
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+/* ========== reader: sections ========== */
 function renderSections(){
   document.getElementById("secList").innerHTML = SECTIONS.map((s,i)=>`
     <div class="card">
@@ -362,39 +399,79 @@ function renderSections(){
     b.onclick=()=>speak(SECTIONS[+b.dataset.sec].pts_en.join(". "));
   });
 }
-function renderMy(){
-  const en=state.my.en, ja=state.my.ja;
-  document.getElementById("myEn").value=en;
-  document.getElementById("myJa").value=ja;
-  const v=document.getElementById("myView");
-  if(en||ja){
-    v.innerHTML=`<div class="en"><span class="lbl">English</span>${esc(en).replace(/\n/g,"<br>")}</div>
-      <div class="ja"><span class="lbl">日本語</span>${esc(ja).replace(/\n/g,"<br>")}</div>`;
-  } else { v.innerHTML=""; }
+
+/* ========== reader: passages (本棚) ========== */
+let editingId=null, passageQuery="";
+function renderPassages(){
+  const el=document.getElementById("passageList");
+  const q=passageQuery.toLowerCase();
+  if(state.passages.length===0){ el.innerHTML='<p class="muted">まだ保存した対訳はありません。「＋ 新しい対訳を追加」から登録してください。</p>'; return; }
+  const list=state.passages.filter(p=>!q || ((p.title||"")+p.en+p.ja).toLowerCase().includes(q));
+  if(list.length===0){ el.innerHTML='<p class="muted">「'+esc(passageQuery)+'」に一致する対訳はありません。</p>'; return; }
+  el.innerHTML=list.map(p=>`
+    <details class="card pcard">
+      <summary><span class="ptitle">${esc(p.title||"(無題)")}</span><span class="muted">開く ▾</span></summary>
+      <div class="pbtns">
+        <button class="btn sec" onclick="speakPassage('${p.id}')">🔊 英語</button>
+        <button class="btn ghost" onclick="editPassage('${p.id}')">編集</button>
+        <button class="btn bad" onclick="delPassage('${p.id}')">削除</button>
+      </div>
+      <div class="bi">
+        <div class="en"><span class="lbl">English</span>${esc(p.en).replace(/\n/g,"<br>")}</div>
+        <div class="ja"><span class="lbl">日本語</span>${esc(p.ja).replace(/\n/g,"<br>")}</div>
+      </div>
+    </details>`).join("");
 }
-document.getElementById("saveMy").onclick=()=>{
-  state.my={en:document.getElementById("myEn").value, ja:document.getElementById("myJa").value};
-  save(state); renderMy();
-  const m=document.getElementById("mySaved"); m.textContent="保存しました ✓";
-  setTimeout(()=>m.textContent="",1500);
+document.getElementById("passageSearch").oninput=(e)=>{ passageQuery=e.target.value; renderPassages(); };
+function resetPassageForm(){
+  editingId=null;
+  document.getElementById("pTitle").value=""; document.getElementById("pEn").value=""; document.getElementById("pJa").value="";
+  document.getElementById("addPassageSummary").textContent="＋ 新しい対訳を追加";
+  document.getElementById("cancelEdit").style.display="none";
+  document.getElementById("addPassageBox").open=false;
+}
+document.getElementById("savePassage").onclick=()=>{
+  const title=document.getElementById("pTitle").value.trim();
+  const en=document.getElementById("pEn").value;
+  const ja=document.getElementById("pJa").value;
+  if(!en.trim() && !ja.trim()){ alert("英語か日本語のどちらかは入力してください"); return; }
+  if(editingId){
+    const p=state.passages.find(x=>x.id===editingId);
+    if(p){ p.title=title||"(無題)"; p.en=en; p.ja=ja; }
+  } else {
+    state.passages.unshift({id:uid(), title:title||"(無題)", en, ja});
+  }
+  save(state); resetPassageForm(); renderPassages();
 };
+document.getElementById("cancelEdit").onclick=resetPassageForm;
+window.editPassage=function(id){
+  const p=state.passages.find(x=>x.id===id); if(!p) return;
+  editingId=id;
+  document.getElementById("pTitle").value = (p.title==="(無題)"?"":p.title);
+  document.getElementById("pEn").value=p.en;
+  document.getElementById("pJa").value=p.ja;
+  document.getElementById("addPassageSummary").textContent="対訳を編集中";
+  document.getElementById("cancelEdit").style.display="";
+  document.getElementById("addPassageBox").open=true;
+  document.getElementById("addPassageBox").scrollIntoView({behavior:"smooth"});
+};
+window.delPassage=function(id){ if(confirm("この対訳を削除しますか？")){ state.passages=state.passages.filter(x=>x.id!==id); save(state); renderPassages(); } };
+window.speakPassage=function(id){ const p=state.passages.find(x=>x.id===id); if(p) speak(p.en); };
 
 /* ========== flashcards (Leitner) ========== */
-const INTERVAL={1:0,2:1,3:3,4:7,5:16}; // days until due after reaching box
+const INTERVAL={1:0,2:1,3:3,4:7,5:16};
 const DAY=86400000;
 let cur=null, revealed=false;
 function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
 function renderStats(){
   const total=state.words.length, due=dueList().length;
   const learned=state.words.filter(w=>w.box>=4).length;
-  document.getElementById("fcStats").innerHTML=
-    `要復習 <b>${due}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
+  document.getElementById("fcStats").innerHTML=`要復習 <b>${due}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
   document.getElementById("fcBar").style.width=(total?Math.round(learned/total*100):0)+"%";
 }
 function showCard(w){
   cur=w; revealed=false;
-  document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div>
-    <div class="muted" style="margin-top:8px;">タップして答えを見る</div>`;
+  document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div><div class="muted" style="margin-top:8px;">タップして答えを見る</div>`;
   document.getElementById("reveal").style.display="";
   document.getElementById("judgeRow").style.display="none";
   if(state.autoSpeak) speak(w.en);
@@ -420,8 +497,7 @@ function nextCard(){
   renderStats(); renderWordTable();
   const d=dueList();
   if(d.length===0){
-    document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div>
-      <div class="muted" style="margin-top:8px;">今日の要復習はありません。<br>下のボタンで全単語を復習できます。</div>`;
+    document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">今日の要復習はありません。<br>下のボタンで全単語を復習できます。</div>`;
     document.getElementById("reveal").style.display="none";
     document.getElementById("judgeRow").style.display="none";
     if(!document.getElementById("studyAll")){
@@ -433,7 +509,6 @@ function nextCard(){
     return;
   }
   const sa=document.getElementById("studyAll"); if(sa) sa.remove();
-  // pick the most overdue, with light rotation
   d.sort((a,b)=>(a.due||0)-(b.due||0));
   showCard(d[0]);
 }
@@ -442,7 +517,6 @@ document.getElementById("reveal").onclick=revealCard;
 document.getElementById("got").onclick=()=>judge(true);
 document.getElementById("again").onclick=()=>judge(false);
 document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
-document.getElementById("speakMy").onclick=()=>speak(document.getElementById("myEn").value);
 (function(){
   const a=document.getElementById("autoSpeak"); a.checked=!!state.autoSpeak;
   a.onchange=()=>{ state.autoSpeak=a.checked; save(state); };
@@ -453,12 +527,10 @@ document.getElementById("addWord").onclick=()=>{
   const en=document.getElementById("aEn").value.trim();
   const ja=document.getElementById("aJa").value.trim();
   if(!en||!ja){ alert("英語と日本語は必須です"); return; }
-  state.words.push({en,ja,def:document.getElementById("aDef").value.trim(),
-    ex:document.getElementById("aEx").value.trim(),ch:document.getElementById("aCh").value.trim()||"1",box:1,due:0});
+  state.words.push({en,ja,def:document.getElementById("aDef").value.trim(),ex:document.getElementById("aEx").value.trim(),ch:document.getElementById("aCh").value.trim()||"1",box:1,due:0});
   save(state);
   ["aEn","aJa","aDef","aEx"].forEach(id=>document.getElementById(id).value="");
-  renderStats(); renderWordTable();
-  alert("追加しました ✓");
+  renderStats(); renderWordTable(); alert("追加しました ✓");
 };
 function renderWordTable(){
   document.getElementById("listSummary").textContent=`📋 全単語リスト（${state.words.length}語）`;
@@ -466,40 +538,51 @@ function renderWordTable(){
     <td><button class="spk" onclick="speakWord(${i})" title="読み上げ">🔊</button> ${esc(w.en)}</td><td>${esc(w.ja)}</td><td><span class="pill">箱${w.box}</span></td>
     <td><button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="delWord(${i})">削除</button></td>
   </tr>`).join("");
-  document.getElementById("wordTable").innerHTML=
-    `<tr><th>English</th><th>日本語</th><th>状態</th><th></th></tr>${rows}`;
+  document.getElementById("wordTable").innerHTML=`<tr><th>English</th><th>日本語</th><th>状態</th><th></th></tr>${rows}`;
 }
 window.delWord=function(i){ if(confirm("削除しますか？")){ state.words.splice(i,1); save(state); renderStats(); renderWordTable(); } };
 
-/* ========== quiz ========== */
+/* ========== quiz (built-in + custom) ========== */
+function allQuiz(){ return QUIZ.concat(state.quizCustom); }
 function renderQuiz(){
-  const order=QUIZ.map((q,i)=>i);
+  const arr=allQuiz(), total=arr.length;
   document.getElementById("quizScore").style.display="none";
   let answered=0, correct=0;
-  document.getElementById("quizList").innerHTML=order.map((qi,idx)=>{
-    const q=QUIZ[qi];
-    return `<div class="card"><p class="quiz-q">Q${idx+1}. ${esc(q.q)}</p>
-      ${q.opts.map((o,oi)=>`<button class="opt" data-q="${qi}" data-o="${oi}">${esc(o)}</button>`).join("")}
-      <div class="expl" id="ex${qi}" style="display:none">${esc(q.ex)}</div></div>`;
+  document.getElementById("quizList").innerHTML=arr.map((q,idx)=>{
+    const isCustom=idx>=QUIZ.length;
+    return `<div class="card"><p class="quiz-q">Q${idx+1}. ${esc(q.q)} ${isCustom?'<span class="pill">自作</span>':''}</p>
+      ${q.opts.map((o,oi)=>`<button class="opt" data-q="${idx}" data-o="${oi}">${esc(o)}</button>`).join("")}
+      <div class="expl" id="ex${idx}" style="display:none">${esc(q.ex||"")}</div>
+      ${isCustom?`<button class="btn ghost" style="margin-top:8px;padding:4px 10px;font-size:12px" onclick="delQuiz(${idx-QUIZ.length})">この問題を削除</button>`:""}
+    </div>`;
   }).join("");
   document.querySelectorAll(".opt").forEach(btn=>{
     btn.onclick=()=>{
-      const qi=+btn.dataset.q, oi=+btn.dataset.o, q=QUIZ[qi];
+      const qi=+btn.dataset.q, oi=+btn.dataset.o, q=arr[qi];
       const sibs=document.querySelectorAll(`.opt[data-q="${qi}"]`);
       if([...sibs].some(s=>s.disabled)) return;
-      sibs.forEach(s=>{ s.disabled=true;
-        if(+s.dataset.o===q.a) s.classList.add("correct"); });
+      sibs.forEach(s=>{ s.disabled=true; if(+s.dataset.o===q.a) s.classList.add("correct"); });
       if(oi!==q.a) btn.classList.add("wrong");
       document.getElementById("ex"+qi).style.display="";
       answered++; if(oi===q.a) correct++;
-      if(answered===QUIZ.length){
-        document.getElementById("scoreText").textContent=`${correct} / ${QUIZ.length} 正解`;
-        document.getElementById("quizScore").style.display="";
-      }
+      if(answered===total){ document.getElementById("scoreText").textContent=`${correct} / ${total} 正解`; document.getElementById("quizScore").style.display=""; }
     };
   });
 }
 document.getElementById("retry").onclick=renderQuiz;
+window.delQuiz=function(i){ if(confirm("この問題を削除しますか？")){ state.quizCustom.splice(i,1); save(state); renderQuiz(); } };
+document.getElementById("addQuiz").onclick=()=>{
+  const q=document.getElementById("qQ").value.trim();
+  const opts=["qO1","qO2","qO3","qO4"].map(id=>document.getElementById(id).value.trim());
+  const a=parseInt(document.getElementById("qA").value,10)-1;
+  const ex=document.getElementById("qEx").value.trim();
+  if(!q || opts.some(o=>!o)){ alert("問題文と4つの選択肢をすべて入力してください"); return; }
+  state.quizCustom.push({q, opts, a, ex});
+  save(state);
+  ["qQ","qO1","qO2","qO3","qO4","qEx"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("qA").value="1";
+  renderQuiz(); alert("問題を追加しました ✓");
+};
 
 /* ========== data ========== */
 document.getElementById("exp").onclick=()=>{
@@ -511,7 +594,7 @@ document.getElementById("imp").onchange=(e)=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{ try{ const d=JSON.parse(r.result);
-    if(d.words){ state=d; save(state); refreshAll(); alert("読み込みました ✓"); }
+    if(d.words){ state=normalize(d); save(state); refreshAll(); alert("読み込みました ✓"); }
     else alert("形式が違います"); }catch(err){ alert("読み込めませんでした"); } };
   r.readAsText(f);
 };
@@ -522,16 +605,18 @@ document.getElementById("mergeSeed").onclick=()=>{
   save(state); refreshAll(); alert(added+" 語を追加しました");
 };
 document.getElementById("resetProg").onclick=()=>{
-  if(confirm("進捗（箱・要復習）をリセットしますか？単語は残ります。")){
+  if(confirm("単語の進捗（箱・要復習）をリセットしますか？単語・対訳・問題は残ります。")){
     state.words.forEach(w=>{ w.box=1; w.due=0; }); save(state); refreshAll(); alert("リセットしました");
   }
 };
-function refreshAll(){ renderStats(); renderWordTable(); renderMy();
-  document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語`; }
+function refreshAll(){
+  renderStats(); renderWordTable(); renderPassages(); renderQuiz();
+  document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
+}
 
 /* ========== init ========== */
-renderSections(); renderMy(); renderStats(); renderWordTable(); renderQuiz();
-document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語`;
+renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz();
+document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
 </script>
 </body>
 </html>
