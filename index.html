@@ -109,6 +109,18 @@
     <h2 class="vh">📚 マイ対訳（保存した対訳の本棚）</h2>
     <div class="note">英語をチャットでClaudeに訳してもらい、英語と日本語をここに保存。タイトルを付けて何件でも貯められます。本文は<b>この端末内だけ</b>に保存されます（公開されません）。</div>
 
+    <details class="card">
+      <summary>❓ 本棚への追加のしかた・コツ</summary>
+      <ol style="margin:10px 0 0; padding-left:20px; font-size:14px;">
+        <li>下の「＋ 新しい対訳を追加」を開く</li>
+        <li><b>タイトル</b>は「章-節 見出し」に（例：<b>2-1 規制の枠組み</b>）→ 検索・並び替えが楽</li>
+        <li><b>English欄</b>に英語、<b>日本語欄</b>に訳を貼る（改行はそのまま表示されます）</li>
+        <li>1回に貼るのは<b>1セクション程度</b>に区切ると、カードが探しやすい</li>
+        <li>覚えたい語は<b>単語帳</b>にも追加すると定着が早い</li>
+        <li>ときどき「⚙️ データ」タブの<b>書き出し</b>でバックアップ</li>
+      </ol>
+    </details>
+
     <div class="search">
       <input id="passageSearch" placeholder="🔍 タイトル・本文で検索">
     </div>
@@ -190,7 +202,30 @@
 
   <!-- DATA -->
   <section id="data" class="view">
-    <h2 class="vh">データ管理・バックアップ</h2>
+    <h2 class="vh">使い方・データ管理</h2>
+    <div class="card">
+      <details>
+        <summary>📖 このアプリの育て方（ルートA / ルートB）</summary>
+        <p style="font-size:14px; margin:10px 0 4px;"><b>ルートA：要点＋単語を増やす（おすすめ・自動）</b></p>
+        <ol style="margin:0; padding-left:20px; font-size:14px;">
+          <li>教材PDFをチャットでClaudeに送る</li>
+          <li>Claudeが各セクションの要点（英日）とキー単語を作る</li>
+          <li>Claudeがアプリに反映 → 開き直すだけで増える（<b>コピペ不要</b>）</li>
+        </ol>
+        <p style="font-size:14px; margin:12px 0 4px;"><b>ルートB：本棚に全文の対訳を足す（じっくり読む用）</b></p>
+        <ol style="margin:0; padding-left:20px; font-size:14px;">
+          <li>読みたい英語を1セクション分チャットに貼る</li>
+          <li>Claudeが日本語訳を作る</li>
+          <li>「📖 リーダー」の本棚に「章-節 見出し」のタイトルで保存（コピペ）</li>
+        </ol>
+        <p style="font-size:14px; margin:12px 0 4px;"><b>テストを増やす</b></p>
+        <ol style="margin:0; padding-left:20px; font-size:14px;">
+          <li>「✍️ テスト」→「＋ 自分で問題を追加」で自作（端末内に保存）</li>
+          <li>または「○○のテストを5問」とClaudeに頼むとアプリに収録</li>
+        </ol>
+        <p class="muted" style="margin-top:10px;">教科書の本文は<b>本棚＝この端末内だけ</b>に保存（非公開）。公開部分には要点・単語だけ。消える前に「書き出し」でバックアップを。</p>
+      </details>
+    </div>
     <div class="card">
       <p class="sec-title">書き出し / 読み込み<span class="en">PCとiPadの同期・バックアップに</span></p>
       <p class="muted">進捗・単語・対訳・自作問題をファイル（JSON）に書き出せます。別の端末で読み込んで同期できます。</p>
