@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ACCA FA">
+<meta name="theme-color" content="#0f766e">
+<title>ACCA FA 対訳リーダー＆単語帳</title>
+<style>
+  :root{
+    --bg:#f5f7f8; --card:#ffffff; --ink:#1c2526; --sub:#5b6b6e;
+    --line:#e2e8ea; --teal:#0f766e; --teal2:#0d9488; --amber:#b45309;
+    --good:#15803d; --bad:#b91c1c; --chip:#e6f2f0; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1416; --card:#1a2225; --ink:#e7eded; --sub:#9fb0b3;
+      --line:#2a3438; --chip:#143430; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.6; padding-bottom:env(safe-area-inset-bottom);}
+  header{position:sticky; top:0; z-index:10; background:linear-gradient(135deg,var(--teal),var(--teal2));
+    color:#fff; padding:14px 16px calc(14px + env(safe-area-inset-top)); padding-top:max(14px,env(safe-area-inset-top));}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:.2px;}
+  header p{margin:2px 0 0; font-size:12px; opacity:.85;}
+  nav{display:flex; gap:4px; background:var(--card); position:sticky; top:0; z-index:9;
+    border-bottom:1px solid var(--line); padding:6px; overflow-x:auto;}
+  nav button{flex:1 0 auto; min-width:80px; border:0; background:transparent; color:var(--sub);
+    font-size:13px; font-weight:600; padding:10px 8px; border-radius:10px; cursor:pointer;}
+  nav button.active{background:var(--chip); color:var(--teal);}
+  main{padding:14px; max-width:860px; margin:0 auto;}
+  .view{display:none;} .view.active{display:block;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; margin:0 0 12px; box-shadow:var(--shadow);}
+  .sec-title{font-weight:700; font-size:15px; color:var(--teal); margin:0 0 2px;}
+  .sec-title .en{color:var(--sub); font-weight:600; font-size:12px; display:block;}
+  .bi{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;}
+  @media(max-width:560px){ .bi{grid-template-columns:1fr;} }
+  .bi .en{border-left:3px solid var(--line); padding-left:10px; color:var(--ink); font-size:14px;}
+  .bi .ja{border-left:3px solid var(--teal); padding-left:10px; color:var(--ink); font-size:14px;}
+  .lbl{font-size:11px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.5px;}
+  ul.pts{margin:4px 0 0; padding-left:18px;} ul.pts li{margin:3px 0; font-size:14px;}
+  .muted{color:var(--sub); font-size:13px;}
+  button.btn{border:0; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700;
+    cursor:pointer; background:var(--teal); color:#fff;}
+  button.btn.sec{background:var(--chip); color:var(--teal);}
+  button.btn.ghost{background:transparent; color:var(--sub); border:1px solid var(--line);}
+  button.btn.bad{background:#fde8e8; color:var(--bad);}
+  button.btn.good{background:#e6f5ec; color:var(--good);}
+  .row{display:flex; gap:8px; flex-wrap:wrap;}
+  textarea,input,select{width:100%; font:inherit; padding:10px; border:1px solid var(--line);
+    border-radius:10px; background:var(--card); color:var(--ink);}
+  textarea{min-height:120px; resize:vertical;}
+  .field{margin:8px 0;}
+  /* flashcard */
+  #fcWrap{text-align:center;}
+  .flash{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:30px 18px;
+    box-shadow:var(--shadow); min-height:170px; display:flex; flex-direction:column; justify-content:center; cursor:pointer;}
+  .flash .term{font-size:26px; font-weight:800;}
+  .flash .ja{font-size:22px; font-weight:700; color:var(--teal); margin-top:4px;}
+  .flash .def{font-size:14px; color:var(--ink); margin-top:10px;}
+  .flash .ex{font-size:13px; color:var(--sub); font-style:italic; margin-top:8px;}
+  .flash .ch{font-size:11px; color:var(--sub); margin-top:10px;}
+  .progress{height:8px; background:var(--line); border-radius:99px; overflow:hidden; margin:10px 0;}
+  .progress>span{display:block; height:100%; background:var(--teal); width:0;}
+  .stats{display:flex; gap:6px; justify-content:center; flex-wrap:wrap; font-size:12px; color:var(--sub); margin-top:6px;}
+  .stats b{color:var(--ink);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{color:var(--sub); font-size:11px; text-transform:uppercase;}
+  .pill{display:inline-block; background:var(--chip); color:var(--teal); border-radius:99px;
+    padding:1px 8px; font-size:11px; font-weight:700;}
+  .quiz-q{font-weight:700; margin:0 0 8px;}
+  .opt{display:block; width:100%; text-align:left; margin:6px 0; padding:11px 12px; border:1px solid var(--line);
+    border-radius:10px; background:var(--card); color:var(--ink); cursor:pointer; font-size:14px;}
+  .opt.correct{background:#e6f5ec; border-color:var(--good); color:var(--good);}
+  .opt.wrong{background:#fde8e8; border-color:var(--bad); color:var(--bad);}
+  .expl{font-size:13px; color:var(--sub); margin:6px 0 0; padding:8px 10px; background:var(--chip); border-radius:10px;}
+  .note{font-size:12px; color:var(--sub); background:var(--chip); border-radius:10px; padding:10px 12px; margin-top:10px;}
+  h2.vh{font-size:16px; margin:2px 0 12px;}
+  details summary{cursor:pointer; font-weight:700; color:var(--teal); font-size:14px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>ACCA FA — 対訳リーダー＆単語帳</h1>
+  <p>Chapter 1: Introduction to Financial Reporting</p>
+</header>
+<nav>
+  <button data-v="reader" class="active">📖 リーダー</button>
+  <button data-v="cards">🗂 単語帳</button>
+  <button data-v="quiz">✍️ テスト</button>
+  <button data-v="data">⚙️ データ</button>
+</nav>
+<main>
+  <!-- READER -->
+  <section id="reader" class="view active">
+    <div class="note">各セクションの<b>英日の要点</b>です（学習用の要約）。本文そのものは下の「マイ対訳」にご自身の教材から貼り付けると、左右対訳で保存できます。</div>
+    <div id="secList"></div>
+    <div class="card">
+      <p class="sec-title">✍️ マイ対訳（自分の本文を貼り付け）<span class="en">Paste your own English / Japanese here — saved on this device</span></p>
+      <div class="field"><span class="lbl">English</span><textarea id="myEn" placeholder="英語本文をここに貼り付け"></textarea></div>
+      <div class="field"><span class="lbl">日本語</span><textarea id="myJa" placeholder="日本語訳をここに貼り付け"></textarea></div>
+      <div class="row"><button class="btn" id="saveMy">保存</button><span class="muted" id="mySaved"></span></div>
+      <div id="myView" class="bi" style="margin-top:12px;"></div>
+    </div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section id="cards" class="view">
+    <div id="fcWrap">
+      <div class="stats" id="fcStats"></div>
+      <div class="progress"><span id="fcBar"></span></div>
+      <div class="flash" id="flash"><div class="term">読み込み中…</div></div>
+      <div class="row" style="margin-top:12px; justify-content:center;">
+        <button class="btn" id="reveal">答えを見る</button>
+      </div>
+      <div class="row" id="judgeRow" style="margin-top:8px; justify-content:center; display:none;">
+        <button class="btn bad" id="again">😵 まだ</button>
+        <button class="btn good" id="got">😀 覚えた</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <details>
+        <summary>＋ 単語を追加</summary>
+        <div class="field"><span class="lbl">English</span><input id="aEn" placeholder="例: depreciation"></div>
+        <div class="field"><span class="lbl">日本語</span><input id="aJa" placeholder="例: 減価償却"></div>
+        <div class="field"><span class="lbl">意味/メモ</span><input id="aDef" placeholder="任意"></div>
+        <div class="field"><span class="lbl">例文</span><input id="aEx" placeholder="任意"></div>
+        <div class="field"><span class="lbl">章</span><input id="aCh" value="1"></div>
+        <button class="btn" id="addWord">追加する</button>
+      </details>
+    </div>
+    <div class="card">
+      <details>
+        <summary id="listSummary">📋 全単語リスト</summary>
+        <div style="overflow-x:auto;"><table id="wordTable"></table></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="quiz" class="view">
+    <h2 class="vh">確認テスト（第1章）</h2>
+    <div id="quizList"></div>
+    <div class="card" id="quizScore" style="text-align:center; display:none;">
+      <p class="sec-title" style="justify-content:center;">スコア</p>
+      <p id="scoreText" style="font-size:24px; font-weight:800; margin:4px 0;"></p>
+      <button class="btn sec" id="retry">もう一度</button>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section id="data" class="view">
+    <h2 class="vh">データ管理・バックアップ</h2>
+    <div class="card">
+      <p class="sec-title">書き出し / 読み込み<span class="en">PCとiPadの同期・バックアップに</span></p>
+      <p class="muted">進捗と単語をファイル（JSON）に書き出せます。OneDriveに保存しておけば、別の端末で読み込んで同期できます。</p>
+      <div class="row">
+        <button class="btn" id="exp">⬇️ 書き出し</button>
+        <label class="btn sec" style="cursor:pointer;">⬆️ 読み込み<input type="file" id="imp" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div class="card">
+      <p class="sec-title">メンテナンス</p>
+      <div class="row">
+        <button class="btn ghost" id="mergeSeed">最新の収録単語を取り込む</button>
+        <button class="btn bad" id="resetProg">進捗だけリセット</button>
+      </div>
+      <p class="muted" id="dataStat" style="margin-top:10px;"></p>
+    </div>
+    <div class="note">
+      <b>iPad / iPhone で使うには</b><br>
+      ① このファイルをOneDriveに置く → ファイルアプリ／ブラウザで開く<br>
+      ② Safariで開き、共有ボタン →「ホーム画面に追加」でアプリ化（オフライン可・進捗が消えにくい）<br>
+      <b>注意：</b>ブラウザ保存の進捗は、長期間開かないと消えることがあります。ときどき「書き出し」でバックアップしてください。
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ========== seed data ========== */
+const SEED_WORDS = [
+ ["financial reporting","財務報告","企業の財務情報を外部の利害関係者に報告すること。","Financial reporting helps investors make decisions."],
+ ["financial accounting","財務会計","取引を記録・分類・要約し、外部向けの財務諸表を作成する会計。","Financial accounting produces annual financial statements."],
+ ["management accounting","管理会計","経営者が計画・統制・意思決定に使う社内向けの詳細な会計情報。","Management accounting is used internally for planning."],
+ ["business entity","事業体","会計上、所有者と区別して扱われる事業の単位。","A business entity is treated separately from its owner."],
+ ["sole trader","個人事業主","1人が所有・経営する最も単純な事業形態。無限責任。","A sole trader has unlimited liability."],
+ ["partnership","パートナーシップ（組合）","2人以上が利益を分け合い、損失に無限責任を負う事業形態。","Partners are jointly and severally liable."],
+ ["limited liability company","有限責任会社","所有者と別個の法人格を持ち、株主の責任が出資額に限定される会社。","A company is a separate legal entity."],
+ ["incorporation","法人化","会社を別個の法人として法的に設立する手続き。","Incorporation creates a separate legal entity."],
+ ["shareholder","株主","会社に出資し、株式を保有する所有者。","Shareholders elect the board of directors."],
+ ["stakeholder","利害関係者","企業の活動に利害を持つ人・組織。","Lenders are an important stakeholder group."],
+ ["unlimited liability","無限責任","事業の負債に対し個人資産まで使って弁済する責任。","Sole traders have unlimited liability."],
+ ["drawings","引出金","個人事業主やパートナーが事業から私的に引き出す金額。","Drawings reduce the capital account."],
+ ["dividend","配当","会社が蓄積した利益から株主に支払う投資の見返り。","Dividends are paid from accumulated profits."],
+ ["statement of financial position","財政状態計算書（B/S）","期末時点の資産・負債・資本の残高をまとめた計算書。","The statement of financial position shows assets and liabilities."],
+ ["statement of profit or loss","損益計算書（P/L）","期間中の収益と費用をまとめ利益を示す計算書。","The statement of profit or loss shows revenue and expenses."],
+ ["statement of cash flows","キャッシュフロー計算書","期間中の現金の収入と支出をまとめた計算書。","A statement of cash flows summarises cash movements."],
+ ["statement of changes in equity","株主資本等変動計算書","期首から期末までの資本の増減をまとめた計算書。","Only companies prepare a statement of changes in equity."],
+ ["notes to the financial statements","注記","会計方針やその他の開示で財務諸表を補足する説明。","The notes include the accounting policies."],
+ ["asset","資産","過去の事象の結果として企業が支配する現在の経済的資源。","A building used in operations is an asset."],
+ ["liability","負債","過去の事象の結果として生じた、経済的資源を引き渡す現在の義務。","A bank loan is a liability."],
+ ["equity","資本（持分）","資産から負債を差し引いた残余持分。","Equity = assets − liabilities."],
+ ["income","収益","資本の増加につながる資産の増加・負債の減少（出資を除く）。","Sales generate income."],
+ ["expense","費用","資本の減少につながる資産の減少・負債の増加（分配を除く）。","Buying services creates an expense."],
+ ["IFRS Accounting Standards","IFRS会計基準","各国の財務諸表作成の差異を減らすための国際的な会計基準。","IFRS Accounting Standards promote comparability."],
+ ["IASB","国際会計基準審議会","IFRS会計基準と概念フレームワークを策定する機関。","The IASB issues the Conceptual Framework."],
+ ["Conceptual Framework","概念フレームワーク","財務報告の基礎となる考え方・概念・原則をまとめた文書。","The Conceptual Framework underpins all IFRS Standards."],
+ ["qualitative characteristics","質的特性","財務情報を有用にする属性。","Relevance is a qualitative characteristic."],
+ ["relevance","目的適合性","利用者の意思決定に影響を与えうる情報の性質。","Relevant information has predictive value."],
+ ["faithful representation","忠実な表現","取引を実態に即して（完全・中立・誤りなく）表す性質。","Faithful representation requires neutrality."],
+ ["materiality","重要性","脱漏・誤表示が利用者の判断を変えうるかどうかの基準。","Materiality affects relevance."],
+ ["comparability","比較可能性","期間間・企業間で財務諸表を比較できる性質。","Comparability is an enhancing characteristic."],
+ ["verifiability","検証可能性","異なる観察者が情報の妥当性を確かめられる性質。","Counting cash gives direct verifiability."],
+ ["timeliness","適時性","意思決定に間に合うように情報が利用できる性質。","Old information loses timeliness."],
+ ["understandability","理解可能性","情報が利用者に分かりやすく示される性質。","Clear presentation aids understandability."],
+ ["substance over form","実質優先（形式より実質）","法的形式より経済的実態を優先して会計処理する考え方。","Redeemable preference shares show substance over form."],
+ ["going concern","継続企業の前提","企業が予見可能な将来にわたり事業を続けるという前提。","Accounts assume the entity is a going concern."],
+ ["accrual accounting","発生主義会計","現金の授受に関わらず、収益・費用が発生した時点で記録する考え方。","Accruals ignore the timing of cash."],
+ ["prudence","慎重性","不確実性の下で資産・収益を過大、負債・費用を過小にしないよう慎重に判断すること。","Prudence avoids overstating assets."],
+ ["consistency","一貫性","同様の取引を期間内・期間間で同じ方法で処理すること。","Consistency aids comparability."],
+ ["offsetting","相殺","資産と負債、収益と費用を相殺して純額で表示すること（原則禁止）。","Offsetting is generally not permitted."],
+ ["duality","二面性（二重性）","すべての取引は二つの効果を持ち二重に記録されるという原則。複式簿記の基礎。","Duality is the basis of double-entry."],
+ ["historical cost","取得原価","取引時点の当初の金額。","Historical cost ignores later inflation."],
+ ["current value","現在価値","現時点での価値（取得原価と異なりうる）。","Current value may exceed historical cost."],
+ ["current asset","流動資産","報告日から12か月以内に現金化が見込まれる資産。","Receivables are a current asset."],
+ ["non-current asset","固定資産（非流動資産）","長期にわたり事業で使用される資産。","A delivery van is a non-current asset."],
+ ["current liability","流動負債","報告日から12か月以内に決済される負債。","Payables are a current liability."],
+ ["non-current liability","固定負債（非流動負債）","報告日から12か月超で決済される負債。","A 2-year loan is a non-current liability."],
+ ["solvency","支払能力","企業が債務を返済できる能力。","Lenders assess solvency."],
+ ["floating charge","浮動担保","変動する資産全体に設定される担保。","A floating charge covers fluctuating inventory."],
+ ["revaluation surplus","再評価剰余金","土地・建物などの再評価による価値増加分。その他の包括利益。","A revaluation surplus is other comprehensive income."],
+ ["retained earnings","利益剰余金","過去から蓄積された留保利益。","Dividends are paid from retained earnings."],
+ ["share capital","資本金","株式発行による出資額。","Share capital is shown within equity."],
+ ["share premium","株式払込剰余金","額面を超えて払い込まれた金額。","Share premium arises on share issues above par."],
+ ["cost of sales","売上原価","販売した商品・製品の原価。","Cost of sales includes raw materials."],
+ ["other comprehensive income","その他の包括利益","当期に実現していない利得・損失（再評価剰余金など）。","OCI includes revaluation surpluses."]
+];
+
+const SECTIONS = [
+ {n:"1", ja:"会計の概観", en:"Overview of accounting",
+  pts_ja:["財務会計：取引を記録・要約し、外部の利害関係者向けに年次財務諸表を作成する。","管理会計：経営者向けに、より詳細で最新の情報を提供し、計画・統制・意思決定・資源の最適化に使う。","財務諸表は、株主から託された資金に対する取締役の受託責任（stewardship）の報告でもある。"],
+  pts_en:["Financial accounting records transactions and produces annual statements for external users.","Management accounting gives detailed, up-to-date information for internal decision-making.","Financial statements report on directors' stewardship of shareholders' funds."]},
+ {n:"2", ja:"財務諸表の利用者", en:"Users of financial statements",
+  pts_ja:["投資家：利益・リターンと投資の安全性に関心。","従業員・労組：雇用の安定や賃金。","貸し手：返済の可否（＝支払能力）。","政府・税務当局：政策立案と課税の基礎。","仕入先・顧客・社会：取引継続性や地域への影響。","利用者は、経営者の受託責任を評価できる、目的適合的で信頼できる情報を必要とする。"],
+  pts_en:["Investors care about profit, returns and the security of their investment.","Lenders need to know if they will be repaid (solvency).","Government and tax authorities use statements for policy and tax.","Users need relevant and reliable information to assess stewardship."]},
+ {n:"3", ja:"事業体の種類", en:"Types of business entity",
+  pts_ja:["個人事業主：1人所有、法人格なし、無限責任。資本勘定のみ。","パートナーシップ：2人以上、無限責任、資本勘定＋当座勘定。","有限責任会社：法人化により所有者と別個の法人格。株主は出資額までの責任。配当で還元、引出は不可。","会社は別個の法人ゆえ、訴訟・借入（浮動担保）・課税で個人事業主や組合と大きく異なる。法人化には登記・監査などのコストや公開義務という不利もある。"],
+  pts_en:["Sole trader: one owner, no legal separation, unlimited liability.","Partnership: two or more owners, unlimited liability, capital + current accounts.","Limited company: separate legal entity; shareholders' liability is limited; returns come as dividends.","Companies differ in suing, raising loans (floating charges) and taxation; incorporation also brings filing, audit and disclosure costs."]},
+ {n:"4", ja:"概念フレームワーク", en:"The Framework",
+  pts_ja:["概念フレームワークは、すべてのIFRS会計基準と財務諸表の基礎となる考え方・概念・原則を示す文書（IASBが作成）。","目的：IASBの基準開発を助け、基準に十分な指針がない場合の会計方針策定を助ける。","財務報告の主な目的：経済的資源の提供に関する意思決定に有用な財務情報を提供すること。","慎重性（prudence）：不確実性の下で資産・収益の過大計上、負債・費用の過小計上を防ぐ。"],
+  pts_en:["The Conceptual Framework sets out the ideas underlying all IFRS Standards.","Its purpose is to help the IASB develop standards and preparers develop policies.","The objective of financial reporting is to provide useful financial information for resource-allocation decisions."]},
+ {n:"5", ja:"質的特性", en:"Qualitative characteristics",
+  pts_ja:["基本的質的特性：①目的適合性（予測価値・確認価値、重要性が関わる）②忠実な表現（完全・中立・誤りなし、実質優先）。","補強的質的特性：比較可能性・検証可能性・適時性・理解可能性。","重要性（materiality）は目的適合性に直接影響する閾値（しきい値）。"],
+  pts_en:["Fundamental: relevance (predictive/confirmatory value) and faithful representation (complete, neutral, free from error).","Enhancing: comparability, verifiability, timeliness, understandability.","Materiality is a threshold quality affecting relevance."]},
+ {n:"6", ja:"財務諸表の構成要素", en:"Elements of the financial statements",
+  pts_ja:["資産：過去の事象の結果として企業が支配する現在の経済的資源。","負債：経済的資源を引き渡す現在の義務。","資本：資産−負債の残余持分。","収益：出資以外で資本を増やす資産増・負債減。","費用：分配以外で資本を減らす資産減・負債増。","資産・負債は使用期間で流動／固定に分類。"],
+  pts_en:["Asset: a present economic resource controlled as a result of past events.","Liability: a present obligation to transfer an economic resource.","Equity: the residual interest (assets − liabilities).","Income and expenses change equity, excluding owner contributions/distributions."]},
+ {n:"7", ja:"財務諸表の構成", en:"Components of a set of financial statements",
+  pts_ja:["IFRS 18に基づき、財務諸表一式は次から成る：財政状態計算書／損益及びその他の包括利益計算書／株主資本等変動計算書／キャッシュフロー計算書／注記。","資産・負債は流動／固定に分類（12か月基準）。","費用は機能別（売上原価・販売費・管理費）または性質別に分類できる。","その他の包括利益の代表例は再評価剰余金。"],
+  pts_en:["A set of statements comprises: SOFP, statement of P/L and OCI, statement of changes in equity, statement of cash flows, and notes.","Assets/liabilities are split current/non-current on a 12-month basis.","Expenses may be classified by function or by nature."]},
+ {n:"8", ja:"重要な会計原則・概念", en:"Important accounting principles and concepts",
+  pts_ja:["重要性／実質優先／継続企業の前提／事業体（所有者と分離）／発生主義／慎重性／一貫性／相殺禁止／二面性／取得原価と現在価値。","発生主義：現金の授受でなく、収益が稼得され費用が発生した時点で記録。","相殺は原則禁止。資産と負債は総額で別々に表示。","二面性は複式簿記の基礎。"],
+  pts_en:["Key concepts: materiality, substance over form, going concern, business entity, accruals, prudence, consistency, no offsetting, duality, historical cost vs current value.","Accruals: record revenue when earned and expenses when incurred, ignoring cash timing.","Duality underpins double-entry bookkeeping."]},
+ {n:"9", ja:"章のまとめ", en:"Chapter summary",
+  pts_ja:["財務報告とは何か、事業体の種類、利用者と情報ニーズ、主要な財務諸表の目的、構成要素、概念フレームワークと質的特性、主要な会計原則——が本章の骨子。","次章では、これらを支える規制の枠組み（regulatory framework）を学ぶ。"],
+  pts_en:["This chapter covered financial reporting, entity types, users, the main statements, the elements, the Framework and qualitative characteristics, and key accounting concepts.","Chapter 2 covers the regulatory framework."]}
+];
+
+const QUIZ = [
+ {q:"個人事業主（sole trader）の事業の負債に対する責任は？",
+  opts:["出資額が上限（有限責任）","無限責任（個人資産も対象）","責任を負わない","他の事業主と連帯責任のみ"],
+  a:1, ex:"個人事業主は法的に事業と個人が区別されず、無限責任を負います。"},
+ {q:"次のうち「補強的（enhancing）」質的特性はどれ？",
+  opts:["目的適合性（relevance）","忠実な表現（faithful representation）","比較可能性（comparability）","重要性（materiality）"],
+  a:2, ex:"比較可能性・検証可能性・適時性・理解可能性が補強的。目的適合性と忠実な表現は基本的特性です。"},
+ {q:"発生主義（accruals）の考え方として正しいのは？",
+  opts:["現金を受け取った時に収益を計上","収益が稼得された時に計上（現金の時期は問わない）","期末にまとめて計上","支払った時にのみ費用計上"],
+  a:1, ex:"発生主義は現金の授受のタイミングと無関係に、収益の稼得・費用の発生時点で記録します。"},
+ {q:"資本（equity）の定義は？",
+  opts:["資産 ＋ 負債","資産 − 負債","負債 − 資産","収益 − 費用"],
+  a:1, ex:"資本は資産から負債を控除した残余持分（residual interest）です。"},
+ {q:"「2年後に返済予定の借入金」の分類は？",
+  opts:["流動資産","流動負債","固定（非流動）負債","資本"],
+  a:2, ex:"報告日から12か月超で決済されるため固定（非流動）負債です。"},
+ {q:"「実質優先（substance over form）」の例として適切なのは？",
+  opts:["償還可能優先株を負債として処理","土地を取得原価で計上","売上を現金受取時に計上","在庫を相殺表示"],
+  a:0, ex:"法的には株式でも返済義務があるため、実態に即して負債として処理します。"},
+ {q:"継続企業の前提（going concern）とは？",
+  opts:["1年以内に清算する前提","予見可能な将来にわたり事業を継続する前提","利益が必ず出る前提","現金が常に潤沢な前提"],
+  a:1, ex:"清算や大幅縮小の意図・必要がなく、当面（通常12か月）事業を続けると仮定します。"},
+ {q:"相殺（offsetting）の取り扱いは？",
+  opts:["常に推奨される","原則禁止（限られた例外を除く）","流動項目のみ可","資本項目のみ可"],
+  a:1, ex:"純額表示は利用者の情報を減らすため原則禁止。総額で別々に表示します。"}
+];
+
+/* ========== storage ========== */
+const KEY="accaStudy.v1";
+function load(){ try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return {};} }
+function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
+let state = load();
+function freshWord(w){ return {en:w[0],ja:w[1],def:w[2]||"",ex:w[3]||"",ch:"1",box:1,due:0}; }
+if(!state.words){ state.words = SEED_WORDS.map(freshWord); }
+if(state.my===undefined){ state.my={en:"",ja:""}; }
+save(state);
+
+/* ========== nav ========== */
+document.querySelectorAll("nav button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById(b.dataset.v).classList.add("active");
+    if(b.dataset.v==="cards") nextCard();
+  };
+});
+
+/* ========== reader ========== */
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function renderSections(){
+  document.getElementById("secList").innerHTML = SECTIONS.map(s=>`
+    <div class="card">
+      <p class="sec-title">${s.n}. ${esc(s.ja)}<span class="en">${esc(s.n)}. ${esc(s.en)}</span></p>
+      <div class="bi">
+        <div class="en"><span class="lbl">English</span><ul class="pts">${s.pts_en.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>
+        <div class="ja"><span class="lbl">日本語</span><ul class="pts">${s.pts_ja.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>
+      </div>
+    </div>`).join("");
+}
+function renderMy(){
+  const en=state.my.en, ja=state.my.ja;
+  document.getElementById("myEn").value=en;
+  document.getElementById("myJa").value=ja;
+  const v=document.getElementById("myView");
+  if(en||ja){
+    v.innerHTML=`<div class="en"><span class="lbl">English</span>${esc(en).replace(/\n/g,"<br>")}</div>
+      <div class="ja"><span class="lbl">日本語</span>${esc(ja).replace(/\n/g,"<br>")}</div>`;
+  } else { v.innerHTML=""; }
+}
+document.getElementById("saveMy").onclick=()=>{
+  state.my={en:document.getElementById("myEn").value, ja:document.getElementById("myJa").value};
+  save(state); renderMy();
+  const m=document.getElementById("mySaved"); m.textContent="保存しました ✓";
+  setTimeout(()=>m.textContent="",1500);
+};
+
+/* ========== flashcards (Leitner) ========== */
+const INTERVAL={1:0,2:1,3:3,4:7,5:16}; // days until due after reaching box
+const DAY=86400000;
+let cur=null, revealed=false;
+function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
+function renderStats(){
+  const total=state.words.length, due=dueList().length;
+  const learned=state.words.filter(w=>w.box>=4).length;
+  document.getElementById("fcStats").innerHTML=
+    `要復習 <b>${due}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
+  document.getElementById("fcBar").style.width=(total?Math.round(learned/total*100):0)+"%";
+}
+function showCard(w){
+  cur=w; revealed=false;
+  document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div>
+    <div class="muted" style="margin-top:8px;">タップして答えを見る</div>`;
+  document.getElementById("reveal").style.display="";
+  document.getElementById("judgeRow").style.display="none";
+}
+function revealCard(){
+  if(!cur) return; revealed=true;
+  const w=cur;
+  document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div>
+    <div class="ja">${esc(w.ja)}</div>
+    ${w.def?`<div class="def">${esc(w.def)}</div>`:""}
+    ${w.ex?`<div class="ex">e.g. ${esc(w.ex)}</div>`:""}
+    <div class="ch">第${esc(w.ch||"1")}章 ・ 箱${w.box}</div>`;
+  document.getElementById("reveal").style.display="none";
+  document.getElementById("judgeRow").style.display="";
+}
+function judge(ok){
+  if(!cur) return;
+  if(ok){ cur.box=Math.min(5,cur.box+1); cur.due=Date.now()+INTERVAL[cur.box]*DAY; }
+  else { cur.box=1; cur.due=Date.now(); }
+  save(state); nextCard();
+}
+function nextCard(){
+  renderStats(); renderWordTable();
+  const d=dueList();
+  if(d.length===0){
+    document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div>
+      <div class="muted" style="margin-top:8px;">今日の要復習はありません。<br>下のボタンで全単語を復習できます。</div>`;
+    document.getElementById("reveal").style.display="none";
+    document.getElementById("judgeRow").style.display="none";
+    if(!document.getElementById("studyAll")){
+      const b=document.createElement("button"); b.className="btn sec"; b.id="studyAll";
+      b.textContent="全単語を復習"; b.style.marginTop="10px";
+      b.onclick=()=>{ state.words.forEach(w=>w.due=0); save(state); b.remove(); nextCard(); };
+      document.getElementById("fcWrap").appendChild(b);
+    }
+    return;
+  }
+  const sa=document.getElementById("studyAll"); if(sa) sa.remove();
+  // pick the most overdue, with light rotation
+  d.sort((a,b)=>(a.due||0)-(b.due||0));
+  showCard(d[0]);
+}
+document.getElementById("flash").onclick=()=>{ if(!revealed) revealCard(); };
+document.getElementById("reveal").onclick=revealCard;
+document.getElementById("got").onclick=()=>judge(true);
+document.getElementById("again").onclick=()=>judge(false);
+document.getElementById("addWord").onclick=()=>{
+  const en=document.getElementById("aEn").value.trim();
+  const ja=document.getElementById("aJa").value.trim();
+  if(!en||!ja){ alert("英語と日本語は必須です"); return; }
+  state.words.push({en,ja,def:document.getElementById("aDef").value.trim(),
+    ex:document.getElementById("aEx").value.trim(),ch:document.getElementById("aCh").value.trim()||"1",box:1,due:0});
+  save(state);
+  ["aEn","aJa","aDef","aEx"].forEach(id=>document.getElementById(id).value="");
+  renderStats(); renderWordTable();
+  alert("追加しました ✓");
+};
+function renderWordTable(){
+  document.getElementById("listSummary").textContent=`📋 全単語リスト（${state.words.length}語）`;
+  const rows=state.words.map((w,i)=>`<tr>
+    <td>${esc(w.en)}</td><td>${esc(w.ja)}</td><td><span class="pill">箱${w.box}</span></td>
+    <td><button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="delWord(${i})">削除</button></td>
+  </tr>`).join("");
+  document.getElementById("wordTable").innerHTML=
+    `<tr><th>English</th><th>日本語</th><th>状態</th><th></th></tr>${rows}`;
+}
+window.delWord=function(i){ if(confirm("削除しますか？")){ state.words.splice(i,1); save(state); renderStats(); renderWordTable(); } };
+
+/* ========== quiz ========== */
+function renderQuiz(){
+  const order=QUIZ.map((q,i)=>i);
+  document.getElementById("quizScore").style.display="none";
+  let answered=0, correct=0;
+  document.getElementById("quizList").innerHTML=order.map((qi,idx)=>{
+    const q=QUIZ[qi];
+    return `<div class="card"><p class="quiz-q">Q${idx+1}. ${esc(q.q)}</p>
+      ${q.opts.map((o,oi)=>`<button class="opt" data-q="${qi}" data-o="${oi}">${esc(o)}</button>`).join("")}
+      <div class="expl" id="ex${qi}" style="display:none">${esc(q.ex)}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".opt").forEach(btn=>{
+    btn.onclick=()=>{
+      const qi=+btn.dataset.q, oi=+btn.dataset.o, q=QUIZ[qi];
+      const sibs=document.querySelectorAll(`.opt[data-q="${qi}"]`);
+      if([...sibs].some(s=>s.disabled)) return;
+      sibs.forEach(s=>{ s.disabled=true;
+        if(+s.dataset.o===q.a) s.classList.add("correct"); });
+      if(oi!==q.a) btn.classList.add("wrong");
+      document.getElementById("ex"+qi).style.display="";
+      answered++; if(oi===q.a) correct++;
+      if(answered===QUIZ.length){
+        document.getElementById("scoreText").textContent=`${correct} / ${QUIZ.length} 正解`;
+        document.getElementById("quizScore").style.display="";
+      }
+    };
+  });
+}
+document.getElementById("retry").onclick=renderQuiz;
+
+/* ========== data ========== */
+document.getElementById("exp").onclick=()=>{
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="acca-fa-study-backup.json"; a.click();
+};
+document.getElementById("imp").onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+    if(d.words){ state=d; save(state); refreshAll(); alert("読み込みました ✓"); }
+    else alert("形式が違います"); }catch(err){ alert("読み込めませんでした"); } };
+  r.readAsText(f);
+};
+document.getElementById("mergeSeed").onclick=()=>{
+  const have=new Set(state.words.map(w=>w.en.toLowerCase()));
+  let added=0;
+  SEED_WORDS.forEach(w=>{ if(!have.has(w[0].toLowerCase())){ state.words.push(freshWord(w)); added++; } });
+  save(state); refreshAll(); alert(added+" 語を追加しました");
+};
+document.getElementById("resetProg").onclick=()=>{
+  if(confirm("進捗（箱・要復習）をリセットしますか？単語は残ります。")){
+    state.words.forEach(w=>{ w.box=1; w.due=0; }); save(state); refreshAll(); alert("リセットしました");
+  }
+};
+function refreshAll(){ renderStats(); renderWordTable(); renderMy();
+  document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語`; }
+
+/* ========== init ========== */
+renderSections(); renderMy(); renderStats(); renderWordTable(); renderQuiz();
+document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語`;
+</script>
+</body>
+</html>
