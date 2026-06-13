@@ -138,6 +138,10 @@
 
   <!-- FLASHCARDS -->
   <section id="cards" class="view">
+    <div class="row" id="modeRow" style="justify-content:center; margin-bottom:10px;">
+      <button class="btn sec" id="modeNormal">今日の復習</button>
+      <button class="btn ghost" id="modeLater">🔖 後日だけ</button>
+    </div>
     <div id="fcWrap">
       <div class="stats" id="fcStats"></div>
       <div class="progress"><span id="fcBar"></span></div>
@@ -150,9 +154,14 @@
         <button class="btn bad" id="again">😵 まだ</button>
         <button class="btn good" id="got">😀 覚えた</button>
       </div>
-      <div class="row" id="snoozeRow" style="justify-content:center; margin-top:8px; display:none;">
-        <button class="btn ghost" id="snooze">🔖 後日に回す（今日はもう出さない）</button>
+      <div class="row" id="snoozeRow" style="justify-content:center; align-items:center; gap:6px; margin-top:8px; display:none;">
+        <span style="font-size:12px; color:var(--sub);">🔖 後日に回す:</span>
+        <button class="btn ghost later-day" data-days="1">翌日</button>
+        <button class="btn ghost later-day" data-days="3">3日後</button>
+        <button class="btn ghost later-day" data-days="7">1週間後</button>
+        <button class="btn ghost" id="laterClear">解除</button>
       </div>
+      <div id="laterStatus" style="text-align:center; font-size:12px; color:var(--amber); margin-top:4px;"></div>
       <div class="row" style="justify-content:center; align-items:center; gap:14px; margin-top:12px; font-size:12px; color:var(--sub);">
         <label><input type="checkbox" id="autoSpeak"> 自動読み上げ</label>
         <label>速度 <input type="range" id="rate" min="0.6" max="1.2" step="0.05" style="width:90px; vertical-align:middle;"></label>
@@ -380,6 +389,7 @@ function freshWord(w){ return {en:w[0],ja:w[1],def:w[2]||"",ex:w[3]||"",ch:"1",b
 function uid(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function normalize(s){
   if(!s.words){ s.words = SEED_WORDS.map(freshWord); }
+  s.words.forEach(w=>{ if(w.snoozed && w.later===undefined){ w.later=true; w.laterDue=w.due||Date.now(); w.due=0; } delete w.snoozed; });
   if(!s.passages){
     s.passages = [];
     if(s.my && (s.my.en || s.my.ja)){ s.passages.push({id:uid(), title:"以前のマイ対訳", en:s.my.en||"", ja:s.my.ja||""}); }
@@ -500,14 +510,24 @@ window.speakPassage=function(id){ const p=state.passages.find(x=>x.id===id); if(
 /* ========== flashcards (Leitner) ========== */
 const INTERVAL={1:0,2:1,3:3,4:7,5:16};
 const DAY=86400000;
-let cur=null, revealed=false;
+let cur=null, revealed=false, mode="normal";
+let seen=new Set();
 function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
+function laterList(){ return state.words.filter(w=>w.later).sort((a,b)=>(a.laterDue||0)-(b.laterDue||0)); }
+function fmtDate(ts){ const d=new Date(ts); return (d.getMonth()+1)+"/"+d.getDate(); }
 function renderStats(){
   const total=state.words.length, due=dueList().length;
   const learned=state.words.filter(w=>w.box>=4).length;
-  const later=state.words.filter(w=>w.snoozed).length;
+  const later=state.words.filter(w=>w.later).length;
   document.getElementById("fcStats").innerHTML=`要復習 <b>${due}</b> ／ 🔖後日 <b>${later}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
   document.getElementById("fcBar").style.width=(total?Math.round(learned/total*100):0)+"%";
+}
+function updateLaterStatus(){
+  const el=document.getElementById("laterStatus");
+  if(cur && cur.later){
+    const days=Math.ceil(((cur.laterDue||0)-Date.now())/DAY);
+    el.textContent="🔖 後日予定: "+fmtDate(cur.laterDue||Date.now())+(days>0?`（あと${days}日）`:"（今日来ています）");
+  } else { el.textContent=""; }
 }
 function showCard(w){
   cur=w; revealed=false;
@@ -515,6 +535,7 @@ function showCard(w){
   document.getElementById("reveal").style.display="";
   document.getElementById("judgeRow").style.display="none";
   document.getElementById("snoozeRow").style.display="";
+  updateLaterStatus();
   if(state.autoSpeak) speak(w.en);
 }
 function revealCard(){
@@ -530,38 +551,54 @@ function revealCard(){
 }
 function judge(ok){
   if(!cur) return;
-  cur.snoozed=false;
   if(ok){ cur.box=Math.min(5,cur.box+1); cur.due=Date.now()+INTERVAL[cur.box]*DAY; }
   else { cur.box=1; cur.due=Date.now(); }
   save(state); nextCard();
 }
 function nextCard(){
   renderStats(); renderWordTable();
-  const d=dueList();
-  if(d.length===0){
-    document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">今日の要復習はありません。<br>下のボタンで全単語を復習できます。</div>`;
+  const sa=document.getElementById("studyAll"); if(sa) sa.remove();
+  let q;
+  if(mode==="later"){ q=laterList().filter(w=>!seen.has(w)); }
+  else { q=dueList().sort((a,b)=>(a.due||0)-(b.due||0)); }
+  if(q.length===0){
+    const msg = mode==="later"
+      ? (laterList().length===0 ? "🔖 後日に回した単語はまだありません。" : "🔖 後日の単語はすべて確認しました。")
+      : "今日の要復習はありません。下のボタンで全単語を復習できます。";
+    document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">${msg}</div>`;
     document.getElementById("reveal").style.display="none";
     document.getElementById("judgeRow").style.display="none";
     document.getElementById("snoozeRow").style.display="none";
-    if(!document.getElementById("studyAll")){
+    document.getElementById("laterStatus").textContent="";
+    cur=null;
+    if(mode==="normal"){
       const b=document.createElement("button"); b.className="btn sec"; b.id="studyAll";
-      b.textContent="全単語を復習（後日分も含む）"; b.style.marginTop="10px";
-      b.onclick=()=>{ state.words.forEach(w=>{w.due=0; w.snoozed=false;}); save(state); b.remove(); nextCard(); };
+      b.textContent="全単語を復習"; b.style.marginTop="10px";
+      b.onclick=()=>{ state.words.forEach(w=>w.due=0); save(state); nextCard(); };
       document.getElementById("fcWrap").appendChild(b);
     }
     return;
   }
-  const sa=document.getElementById("studyAll"); if(sa) sa.remove();
-  d.sort((a,b)=>(a.due||0)-(b.due||0));
-  showCard(d[0]);
+  const w=q[0]; if(mode==="later") seen.add(w);
+  showCard(w);
 }
+function setMode(m){
+  mode=m; seen=new Set();
+  document.getElementById("modeNormal").className="btn "+(m==="normal"?"sec":"ghost");
+  document.getElementById("modeLater").className="btn "+(m==="later"?"sec":"ghost");
+  nextCard();
+}
+document.getElementById("modeNormal").onclick=()=>setMode("normal");
+document.getElementById("modeLater").onclick=()=>setMode("later");
 document.getElementById("flash").onclick=()=>{ if(!revealed) revealCard(); };
 document.getElementById("reveal").onclick=revealCard;
 document.getElementById("got").onclick=()=>judge(true);
 document.getElementById("again").onclick=()=>judge(false);
 document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
-function snoozeCard(){ if(!cur) return; cur.due=Date.now()+DAY; cur.snoozed=true; save(state); nextCard(); }
-document.getElementById("snooze").onclick=snoozeCard;
+function setLater(days){ if(!cur) return; cur.later=true; cur.laterDue=Date.now()+days*DAY; save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
+function clearLater(){ if(!cur) return; cur.later=false; delete cur.laterDue; save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
+document.querySelectorAll(".later-day").forEach(b=>{ b.onclick=()=>setLater(+b.dataset.days); });
+document.getElementById("laterClear").onclick=clearLater;
 (function(){
   const a=document.getElementById("autoSpeak"); a.checked=!!state.autoSpeak;
   a.onchange=()=>{ state.autoSpeak=a.checked; save(state); };
@@ -589,9 +626,9 @@ function renderWordTable(){
   const rows=items.map(({w,i})=>`<tr>
     <td><button class="spk" onclick="speakWord(${i})" title="読み上げ">🔊</button> ${esc(w.en)}</td>
     <td>${esc(w.ja)}</td>
-    <td><span class="pill">箱${w.box}</span>${w.snoozed?' <span class="pill" style="background:#fef3e2;color:var(--amber)">🔖後日</span>':''}</td>
+    <td><span class="pill">箱${w.box}</span>${w.later?` <span class="pill" style="background:#fef3e2;color:var(--amber)">🔖後日${w.laterDue?" "+fmtDate(w.laterDue):""}</span>`:""}</td>
     <td>
-      <button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="toggleLater(${i})">${w.snoozed?"今日に戻す":"後日に"}</button>
+      <button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="toggleLater(${i})">${w.later?"後日を解除":"後日に"}</button>
       <button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="delWord(${i})">削除</button>
     </td>
   </tr>`).join("");
@@ -600,8 +637,8 @@ function renderWordTable(){
 window.delWord=function(i){ if(confirm("削除しますか？")){ state.words.splice(i,1); save(state); renderStats(); renderWordTable(); } };
 window.toggleLater=function(i){
   const w=state.words[i]; if(!w) return;
-  if(w.snoozed){ w.snoozed=false; w.due=0; }
-  else { w.snoozed=true; w.due=Date.now()+DAY; }
+  if(w.later){ w.later=false; delete w.laterDue; }
+  else { w.later=true; w.laterDue=Date.now()+DAY; }
   save(state); renderStats(); renderWordTable();
 };
 document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; renderWordTable(); };
