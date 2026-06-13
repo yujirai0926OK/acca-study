@@ -150,6 +150,9 @@
         <button class="btn bad" id="again">😵 まだ</button>
         <button class="btn good" id="got">😀 覚えた</button>
       </div>
+      <div class="row" id="snoozeRow" style="justify-content:center; margin-top:8px; display:none;">
+        <button class="btn ghost" id="snooze">🔖 後日に回す（今日はもう出さない）</button>
+      </div>
       <div class="row" style="justify-content:center; align-items:center; gap:14px; margin-top:12px; font-size:12px; color:var(--sub);">
         <label><input type="checkbox" id="autoSpeak"> 自動読み上げ</label>
         <label>速度 <input type="range" id="rate" min="0.6" max="1.2" step="0.05" style="width:90px; vertical-align:middle;"></label>
@@ -169,6 +172,7 @@
     <div class="card">
       <details>
         <summary id="listSummary">📋 全単語リスト</summary>
+        <div class="search" style="margin-top:10px;"><input id="wordSearch" placeholder="🔍 単語を検索（英語・日本語・意味）"></div>
         <div style="overflow-x:auto;"><table id="wordTable"></table></div>
       </details>
     </div>
@@ -501,7 +505,8 @@ function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0
 function renderStats(){
   const total=state.words.length, due=dueList().length;
   const learned=state.words.filter(w=>w.box>=4).length;
-  document.getElementById("fcStats").innerHTML=`要復習 <b>${due}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
+  const later=state.words.filter(w=>w.snoozed).length;
+  document.getElementById("fcStats").innerHTML=`要復習 <b>${due}</b> ／ 🔖後日 <b>${later}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
   document.getElementById("fcBar").style.width=(total?Math.round(learned/total*100):0)+"%";
 }
 function showCard(w){
@@ -509,6 +514,7 @@ function showCard(w){
   document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div><div class="muted" style="margin-top:8px;">タップして答えを見る</div>`;
   document.getElementById("reveal").style.display="";
   document.getElementById("judgeRow").style.display="none";
+  document.getElementById("snoozeRow").style.display="";
   if(state.autoSpeak) speak(w.en);
 }
 function revealCard(){
@@ -524,6 +530,7 @@ function revealCard(){
 }
 function judge(ok){
   if(!cur) return;
+  cur.snoozed=false;
   if(ok){ cur.box=Math.min(5,cur.box+1); cur.due=Date.now()+INTERVAL[cur.box]*DAY; }
   else { cur.box=1; cur.due=Date.now(); }
   save(state); nextCard();
@@ -535,10 +542,11 @@ function nextCard(){
     document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">今日の要復習はありません。<br>下のボタンで全単語を復習できます。</div>`;
     document.getElementById("reveal").style.display="none";
     document.getElementById("judgeRow").style.display="none";
+    document.getElementById("snoozeRow").style.display="none";
     if(!document.getElementById("studyAll")){
       const b=document.createElement("button"); b.className="btn sec"; b.id="studyAll";
-      b.textContent="全単語を復習"; b.style.marginTop="10px";
-      b.onclick=()=>{ state.words.forEach(w=>w.due=0); save(state); b.remove(); nextCard(); };
+      b.textContent="全単語を復習（後日分も含む）"; b.style.marginTop="10px";
+      b.onclick=()=>{ state.words.forEach(w=>{w.due=0; w.snoozed=false;}); save(state); b.remove(); nextCard(); };
       document.getElementById("fcWrap").appendChild(b);
     }
     return;
@@ -552,6 +560,8 @@ document.getElementById("reveal").onclick=revealCard;
 document.getElementById("got").onclick=()=>judge(true);
 document.getElementById("again").onclick=()=>judge(false);
 document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
+function snoozeCard(){ if(!cur) return; cur.due=Date.now()+DAY; cur.snoozed=true; save(state); nextCard(); }
+document.getElementById("snooze").onclick=snoozeCard;
 (function(){
   const a=document.getElementById("autoSpeak"); a.checked=!!state.autoSpeak;
   a.onchange=()=>{ state.autoSpeak=a.checked; save(state); };
@@ -567,15 +577,34 @@ document.getElementById("addWord").onclick=()=>{
   ["aEn","aJa","aDef","aEx"].forEach(id=>document.getElementById(id).value="");
   renderStats(); renderWordTable(); alert("追加しました ✓");
 };
+let wordQuery="";
 function renderWordTable(){
   document.getElementById("listSummary").textContent=`📋 全単語リスト（${state.words.length}語）`;
-  const rows=state.words.map((w,i)=>`<tr>
-    <td><button class="spk" onclick="speakWord(${i})" title="読み上げ">🔊</button> ${esc(w.en)}</td><td>${esc(w.ja)}</td><td><span class="pill">箱${w.box}</span></td>
-    <td><button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="delWord(${i})">削除</button></td>
+  const q=wordQuery.toLowerCase();
+  const items=state.words.map((w,i)=>({w,i})).filter(({w})=>!q || ((w.en||"")+(w.ja||"")+(w.def||"")).toLowerCase().includes(q));
+  if(items.length===0){
+    document.getElementById("wordTable").innerHTML=`<tr><td class="muted">「${esc(wordQuery)}」に一致する単語はありません。</td></tr>`;
+    return;
+  }
+  const rows=items.map(({w,i})=>`<tr>
+    <td><button class="spk" onclick="speakWord(${i})" title="読み上げ">🔊</button> ${esc(w.en)}</td>
+    <td>${esc(w.ja)}</td>
+    <td><span class="pill">箱${w.box}</span>${w.snoozed?' <span class="pill" style="background:#fef3e2;color:var(--amber)">🔖後日</span>':''}</td>
+    <td>
+      <button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="toggleLater(${i})">${w.snoozed?"今日に戻す":"後日に"}</button>
+      <button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="delWord(${i})">削除</button>
+    </td>
   </tr>`).join("");
-  document.getElementById("wordTable").innerHTML=`<tr><th>English</th><th>日本語</th><th>状態</th><th></th></tr>${rows}`;
+  document.getElementById("wordTable").innerHTML=`<tr><th>English</th><th>日本語</th><th>状態</th><th>操作</th></tr>${rows}`;
 }
 window.delWord=function(i){ if(confirm("削除しますか？")){ state.words.splice(i,1); save(state); renderStats(); renderWordTable(); } };
+window.toggleLater=function(i){
+  const w=state.words[i]; if(!w) return;
+  if(w.snoozed){ w.snoozed=false; w.due=0; }
+  else { w.snoozed=true; w.due=Date.now()+DAY; }
+  save(state); renderStats(); renderWordTable();
+};
+document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; renderWordTable(); };
 
 /* ========== quiz (built-in + custom) ========== */
 function allQuiz(){ return QUIZ.concat(state.quizCustom); }
