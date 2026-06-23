@@ -141,12 +141,13 @@
     <div class="row" id="modeRow" style="justify-content:center; margin-bottom:10px;">
       <button class="btn sec" id="modeNormal">今日の復習</button>
       <button class="btn ghost" id="modeLater">🔖 後日だけ</button>
+      <button class="btn ghost" id="modeAuto">🚶 ながら再生</button>
     </div>
     <div id="fcWrap">
       <div class="stats" id="fcStats"></div>
       <div class="progress"><span id="fcBar"></span></div>
       <div class="flash" id="flash"><div class="term">読み込み中…</div></div>
-      <div class="row" style="margin-top:12px; justify-content:center;">
+      <div class="row" id="manualBtns" style="margin-top:12px; justify-content:center;">
         <button class="btn sec" id="speakTerm" title="英語を読み上げ">🔊 読み上げ</button>
         <button class="btn" id="reveal">答えを見る</button>
       </div>
@@ -165,6 +166,35 @@
       <div class="row" style="justify-content:center; align-items:center; gap:14px; margin-top:12px; font-size:12px; color:var(--sub);">
         <label><input type="checkbox" id="autoSpeak"> 自動読み上げ</label>
         <label>速度 <input type="range" id="rate" min="0.6" max="1.2" step="0.05" style="width:90px; vertical-align:middle;"></label>
+      </div>
+      <div class="card" id="autoPanel" style="display:none; text-align:left; margin-top:16px;">
+        <p class="sec-title">🚶 ながら学習（ハンズフリー）<span class="en">英語 →（間）→ 日本語 を自動で読み上げ。歩きながら聞くだけ。</span></p>
+        <div class="field">
+          <span class="lbl">出題範囲</span>
+          <select id="autoSource">
+            <option value="all">全単語</option>
+            <option value="due">今日の要復習</option>
+            <option value="later">🔖 後日だけ</option>
+          </select>
+        </div>
+        <div class="field">
+          <span class="lbl">答えまでの間：<b id="gap1Val">3.0</b> 秒</span>
+          <input type="range" id="gap1" min="1" max="7" step="0.5">
+        </div>
+        <div class="field">
+          <span class="lbl">次の単語までの間：<b id="gap2Val">1.5</b> 秒</span>
+          <input type="range" id="gap2" min="0.5" max="5" step="0.5">
+        </div>
+        <div class="row" style="gap:16px; margin-top:4px;">
+          <label><input type="checkbox" id="autoLoop"> くり返す（ループ）</label>
+          <label><input type="checkbox" id="autoShuffle"> シャッフル</label>
+        </div>
+        <div class="row" style="margin-top:12px; justify-content:center;">
+          <button class="btn" id="autoToggle" style="font-size:16px; padding:14px 30px;">▶ 開始</button>
+        </div>
+        <p class="muted" id="autoNote" style="margin-top:10px;">
+          ※ 再生中は画面が自動で消えないようにします。iPhoneは<b>Safariを前面・画面オン</b>のままに。手動で画面を消すと止まるので、その時は「▶ 開始」で再開してください。
+        </p>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
@@ -397,17 +427,19 @@ function normalize(s){
   if(!s.quizCustom){ s.quizCustom = []; }
   if(s.rate===undefined){ s.rate = 0.95; }
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
+  if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
   return s;
 }
 let state = normalize(load());
 save(state);
 
 /* ========== speech (Web Speech API: 無料・オフライン) ========== */
-let enVoice=null;
+let enVoice=null, jaVoice=null;
 function pickVoice(){
   if(!window.speechSynthesis) return;
   const vs=speechSynthesis.getVoices();
   enVoice = vs.find(v=>/en[-_]GB/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || null;
+  jaVoice = vs.find(v=>/ja[-_]JP/i.test(v.lang)) || vs.find(v=>/^ja/i.test(v.lang)) || null;
 }
 if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
 function speak(text){
@@ -556,6 +588,7 @@ function judge(ok){
   save(state); nextCard();
 }
 function nextCard(){
+  if(mode==="auto"){ renderStats(); return; }
   renderStats(); renderWordTable();
   const sa=document.getElementById("studyAll"); if(sa) sa.remove();
   let q;
@@ -583,13 +616,30 @@ function nextCard(){
   showCard(w);
 }
 function setMode(m){
+  if(mode==="auto" && m!=="auto") autoStop();
   mode=m; seen=new Set();
   document.getElementById("modeNormal").className="btn "+(m==="normal"?"sec":"ghost");
   document.getElementById("modeLater").className="btn "+(m==="later"?"sec":"ghost");
-  nextCard();
+  document.getElementById("modeAuto").className="btn "+(m==="auto"?"sec":"ghost");
+  const isAuto=(m==="auto");
+  document.getElementById("autoPanel").style.display=isAuto?"":"none";
+  document.getElementById("manualBtns").style.display=isAuto?"none":"";
+  if(isAuto){
+    cur=null; revealed=false;
+    document.getElementById("reveal").style.display="none";
+    document.getElementById("judgeRow").style.display="none";
+    document.getElementById("snoozeRow").style.display="none";
+    document.getElementById("laterStatus").textContent="";
+    document.getElementById("flash").innerHTML=`<div class="term">🚶 ながら学習</div><div class="muted" style="margin-top:8px;">下の「▶ 開始」を押すと、英語→日本語を自動で読み上げます。</div>`;
+    document.getElementById("fcStats").innerHTML="🎧 イヤホン推奨";
+    document.getElementById("fcBar").style.width="0%";
+  } else {
+    nextCard();
+  }
 }
 document.getElementById("modeNormal").onclick=()=>setMode("normal");
 document.getElementById("modeLater").onclick=()=>setMode("later");
+document.getElementById("modeAuto").onclick=()=>setMode("auto");
 document.getElementById("flash").onclick=()=>{ if(!revealed) revealCard(); };
 document.getElementById("reveal").onclick=revealCard;
 document.getElementById("got").onclick=()=>judge(true);
@@ -604,6 +654,109 @@ document.getElementById("laterClear").onclick=clearLater;
   a.onchange=()=>{ state.autoSpeak=a.checked; save(state); };
   const r=document.getElementById("rate"); r.value=state.rate;
   r.oninput=()=>{ state.rate=+r.value; save(state); };
+})();
+
+/* ====== ながら学習（ハンズフリー自動再生） ====== */
+let auto={on:false, list:[], idx:0, timer:null, fb:null, keep:null, wake:null};
+async function requestWake(){
+  try{ if("wakeLock" in navigator){ auto.wake=await navigator.wakeLock.request("screen"); } }catch(e){}
+}
+function releaseWake(){ try{ if(auto.wake){ auto.wake.release(); auto.wake=null; } }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(auto.on && document.visibilityState==="visible") requestWake(); });
+
+function autoBuildList(){
+  const s=(state.auto&&state.auto.source)||"all";
+  let src = s==="due" ? dueList() : s==="later" ? laterList() : state.words.slice();
+  src=src.slice();
+  if(state.auto&&state.auto.shuffle){
+    for(let i=src.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=src[i]; src[i]=src[j]; src[j]=t; }
+  }
+  return src;
+}
+function autoFace(w, revealed){
+  document.getElementById("flash").innerHTML = revealed
+    ? `<div class="term">${esc(w.en)}</div><div class="ja">${esc(w.ja)}</div>${w.def?`<div class="def">${esc(w.def)}</div>`:""}`
+    : `<div class="term">${esc(w.en)}</div><div class="muted" style="margin-top:8px;">🎧 聞いて思い出そう…</div>`;
+}
+function autoUtter(text, lang, voice, done){
+  if(!window.speechSynthesis || !text){ done(); return; }
+  let fired=false;
+  const fin=()=>{ if(fired) return; fired=true; if(auto.fb){ clearTimeout(auto.fb); auto.fb=null; } done(); };
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  if(voice){ u.voice=voice; u.lang=voice.lang; } else { u.lang=lang; }
+  u.rate=state.rate||0.95;
+  u.onend=fin; u.onerror=fin;
+  speechSynthesis.speak(u);
+  const est=2500 + (text.length*120)/(state.rate||0.95); // 安全弁: onendが鳴らない端末対策
+  auto.fb=setTimeout(fin, Math.min(20000, est));
+}
+function autoStep(){
+  if(!auto.on) return;
+  if(auto.idx>=auto.list.length){
+    if(state.auto&&state.auto.loop){ auto.idx=0; }
+    else { autoDone("ひと通り終わりました 🎉"); return; }
+  }
+  const w=auto.list[auto.idx];
+  document.getElementById("fcStats").innerHTML=`🚶 ながら再生　<b>${auto.idx+1}</b> / ${auto.list.length}`;
+  document.getElementById("fcBar").style.width=Math.round((auto.idx+1)/auto.list.length*100)+"%";
+  autoFace(w,false);
+  autoUtter(w.en,"en-US",enVoice,()=>{
+    if(!auto.on) return;
+    auto.timer=setTimeout(()=>{
+      if(!auto.on) return;
+      autoFace(w,true);
+      autoUtter(w.ja,"ja-JP",jaVoice,()=>{
+        if(!auto.on) return;
+        auto.timer=setTimeout(()=>{
+          if(!auto.on) return;
+          auto.idx++; autoStep();
+        }, (state.auto.gap2||1.5)*1000);
+      });
+    }, (state.auto.gap1||3)*1000);
+  });
+}
+function autoStart(){
+  if(!window.speechSynthesis){ alert("この端末/ブラウザは読み上げに対応していません"); return; }
+  auto.list=autoBuildList();
+  if(auto.list.length===0){
+    document.getElementById("flash").innerHTML=`<div class="term">対象なし</div><div class="muted" style="margin-top:8px;">この範囲には単語がありません。出題範囲を変えてください。</div>`;
+    return;
+  }
+  auto.on=true; auto.idx=0;
+  const t=document.getElementById("autoToggle"); t.textContent="⏸ 停止"; t.className="btn bad";
+  requestWake();
+  auto.keep=setInterval(()=>{ if(auto.on && window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} } }, 8000);
+  autoStep();
+}
+function autoStop(){
+  auto.on=false;
+  if(auto.timer){ clearTimeout(auto.timer); auto.timer=null; }
+  if(auto.fb){ clearTimeout(auto.fb); auto.fb=null; }
+  if(auto.keep){ clearInterval(auto.keep); auto.keep=null; }
+  if(window.speechSynthesis) speechSynthesis.cancel();
+  releaseWake();
+  const t=document.getElementById("autoToggle"); if(t){ t.textContent="▶ 開始"; t.className="btn"; }
+}
+function autoDone(msg){
+  autoStop();
+  document.getElementById("flash").innerHTML=`<div class="term">🎉</div><div class="muted" style="margin-top:8px;">${esc(msg)}</div>`;
+  document.getElementById("fcBar").style.width="100%";
+}
+document.getElementById("autoToggle").onclick=()=>{ if(auto.on) autoStop(); else autoStart(); };
+(function(){
+  const src=document.getElementById("autoSource"); src.value=state.auto.source;
+  src.onchange=()=>{ state.auto.source=src.value; save(state); if(auto.on){ autoStop(); autoStart(); } };
+  const g1=document.getElementById("gap1"), g1v=document.getElementById("gap1Val");
+  g1.value=state.auto.gap1; g1v.textContent=(+state.auto.gap1).toFixed(1);
+  g1.oninput=()=>{ state.auto.gap1=+g1.value; g1v.textContent=(+g1.value).toFixed(1); save(state); };
+  const g2=document.getElementById("gap2"), g2v=document.getElementById("gap2Val");
+  g2.value=state.auto.gap2; g2v.textContent=(+state.auto.gap2).toFixed(1);
+  g2.oninput=()=>{ state.auto.gap2=+g2.value; g2v.textContent=(+g2.value).toFixed(1); save(state); };
+  const lp=document.getElementById("autoLoop"); lp.checked=!!state.auto.loop;
+  lp.onchange=()=>{ state.auto.loop=lp.checked; save(state); };
+  const sh=document.getElementById("autoShuffle"); sh.checked=!!state.auto.shuffle;
+  sh.onchange=()=>{ state.auto.shuffle=sh.checked; save(state); };
 })();
 document.getElementById("addWord").onclick=()=>{
   const en=document.getElementById("aEn").value.trim();
