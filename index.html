@@ -424,6 +424,7 @@ const QUIZ = [
 /* ========== storage ========== */
 const KEY="accaStudy.v1";
 let applyingRemote=false;
+let fb=null, syncPushTimer=null;   // 同期用。save()より先に宣言しておく（TDZ回避）
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return {};} }
 function save(s){
   if(!applyingRemote){ s.updatedAt=Date.now(); }
@@ -899,7 +900,6 @@ const FB_CONFIG = {
 /* ↑↑↑ 上を埋めると同期が有効化されます（本棚の教科書本文は同期対象外） ↑↑↑ */
 const FB_VER="10.12.2";
 const SYNC_READY = !!(FB_CONFIG.apiKey && FB_CONFIG.projectId);
-let fb=null, syncPushTimer=null;
 
 function schedulePush(){
   if(!fb || !fb.user) return;
