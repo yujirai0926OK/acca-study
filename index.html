@@ -246,6 +246,16 @@
   <!-- DATA -->
   <section id="data" class="view">
     <h2 class="vh">使い方・データ管理</h2>
+    <div class="card" id="syncCard">
+      <p class="sec-title">☁️ クラウド同期（Firebase）<span class="en">PCとiPhoneで 進捗・単語・自作テスト を自動同期</span></p>
+      <p class="muted" id="syncStatus">未接続（この端末内だけに保存中）</p>
+      <div class="row">
+        <button class="btn" id="syncLogin">Googleでログインして同期を開始</button>
+        <button class="btn ghost" id="syncNow" style="display:none">今すぐ同期</button>
+        <button class="btn ghost" id="syncLogout" style="display:none">ログアウト</button>
+      </div>
+      <p class="muted" style="margin-top:8px;">※ 📕 本棚の教科書本文は<b>同期しません</b>（この端末内だけ・非公開のまま）。同期するのは進捗・単語・自作テスト・設定です。</p>
+    </div>
     <div class="card">
       <details>
         <summary>📖 このアプリの育て方（ルートA / ルートB）</summary>
@@ -413,8 +423,13 @@ const QUIZ = [
 
 /* ========== storage ========== */
 const KEY="accaStudy.v1";
+let applyingRemote=false;
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return {};} }
-function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
+function save(s){
+  if(!applyingRemote){ s.updatedAt=Date.now(); }
+  localStorage.setItem(KEY, JSON.stringify(s));
+  if(!applyingRemote && typeof schedulePush==="function") schedulePush();
+}
 function freshWord(w){ return {en:w[0],ja:w[1],def:w[2]||"",ex:w[3]||"",ch:"1",box:1,due:0}; }
 function uid(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function normalize(s){
@@ -428,6 +443,7 @@ function normalize(s){
   if(s.rate===undefined){ s.rate = 0.95; }
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
+  if(s.updatedAt===undefined){ s.updatedAt = 0; }
   return s;
 }
 let state = normalize(load());
@@ -585,6 +601,7 @@ function judge(ok){
   if(!cur) return;
   if(ok){ cur.box=Math.min(5,cur.box+1); cur.due=Date.now()+INTERVAL[cur.box]*DAY; }
   else { cur.box=1; cur.due=Date.now(); }
+  cur.mtime=Date.now();
   save(state); nextCard();
 }
 function nextCard(){
@@ -645,8 +662,8 @@ document.getElementById("reveal").onclick=revealCard;
 document.getElementById("got").onclick=()=>judge(true);
 document.getElementById("again").onclick=()=>judge(false);
 document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
-function setLater(days){ if(!cur) return; cur.later=true; cur.laterDue=Date.now()+days*DAY; save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
-function clearLater(){ if(!cur) return; cur.later=false; delete cur.laterDue; save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
+function setLater(days){ if(!cur) return; cur.later=true; cur.laterDue=Date.now()+days*DAY; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
+function clearLater(){ if(!cur) return; cur.later=false; delete cur.laterDue; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
 document.querySelectorAll(".later-day").forEach(b=>{ b.onclick=()=>setLater(+b.dataset.days); });
 document.getElementById("laterClear").onclick=clearLater;
 (function(){
@@ -762,7 +779,7 @@ document.getElementById("addWord").onclick=()=>{
   const en=document.getElementById("aEn").value.trim();
   const ja=document.getElementById("aJa").value.trim();
   if(!en||!ja){ alert("英語と日本語は必須です"); return; }
-  state.words.push({en,ja,def:document.getElementById("aDef").value.trim(),ex:document.getElementById("aEx").value.trim(),ch:document.getElementById("aCh").value.trim()||"1",box:1,due:0});
+  state.words.push({en,ja,def:document.getElementById("aDef").value.trim(),ex:document.getElementById("aEx").value.trim(),ch:document.getElementById("aCh").value.trim()||"1",box:1,due:0,mtime:Date.now()});
   save(state);
   ["aEn","aJa","aDef","aEx"].forEach(id=>document.getElementById(id).value="");
   renderStats(); renderWordTable(); alert("追加しました ✓");
@@ -792,6 +809,7 @@ window.toggleLater=function(i){
   const w=state.words[i]; if(!w) return;
   if(w.later){ w.later=false; delete w.laterDue; }
   else { w.later=true; w.laterDue=Date.now()+DAY; }
+  w.mtime=Date.now();
   save(state); renderStats(); renderWordTable();
 };
 document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; renderWordTable(); };
@@ -867,6 +885,145 @@ function refreshAll(){
   renderStats(); renderWordTable(); renderPassages(); renderQuiz();
   document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
 }
+
+/* ========== クラウド同期（Firebase・任意/オプトイン） ========== */
+/* ↓↓↓ ここにFirebaseコンソールの firebaseConfig を貼る（apiKey等は公開されても問題ない識別子） ↓↓↓ */
+const FB_CONFIG = {
+  apiKey: "AIzaSyDROiN40Yu7MzWymy3TQvIzHfabiPYb6_o",
+  authDomain: "acca-study.firebaseapp.com",
+  projectId: "acca-study",
+  storageBucket: "acca-study.firebasestorage.app",
+  messagingSenderId: "318738907613",
+  appId: "1:318738907613:web:cf28f5836f7ad7e525f634"
+};
+/* ↑↑↑ 上を埋めると同期が有効化されます（本棚の教科書本文は同期対象外） ↑↑↑ */
+const FB_VER="10.12.2";
+const SYNC_READY = !!(FB_CONFIG.apiKey && FB_CONFIG.projectId);
+let fb=null, syncPushTimer=null;
+
+function schedulePush(){
+  if(!fb || !fb.user) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer=setTimeout(pushCloud, 1500);
+}
+function setSyncStatus(t){ const el=document.getElementById("syncStatus"); if(el) el.textContent=t; }
+function setSyncUI(on, u){
+  const l=document.getElementById("syncLogin"), n=document.getElementById("syncNow"), o=document.getElementById("syncLogout");
+  if(l) l.style.display=on?"none":"";
+  if(n) n.style.display=on?"":"none";
+  if(o) o.style.display=on?"":"none";
+}
+function mergeWords(a,b){
+  const map=new Map();
+  const put=(w)=>{ const k=(w&&w.en||"").toLowerCase().trim(); if(!k) return;
+    const ex=map.get(k); if(!ex || (w.mtime||0)>=(ex.mtime||0)) map.set(k,w); };
+  (a||[]).forEach(put); (b||[]).forEach(put);
+  return Array.from(map.values());
+}
+function mergeQuiz(a,b){
+  const map=new Map();
+  (a||[]).concat(b||[]).forEach(q=>{ const k=(q&&q.q||"").trim(); if(k && !map.has(k)) map.set(k,q); });
+  return Array.from(map.values());
+}
+function applyRemote(remote){
+  if(!remote) return;
+  applyingRemote=true;
+  try{
+    state.words = mergeWords(state.words, remote.words);
+    state.quizCustom = mergeQuiz(state.quizCustom, remote.quizCustom);
+    if((remote.updatedAt||0) > (state.updatedAt||0)){
+      if(remote.rate!==undefined) state.rate=remote.rate;
+      if(remote.autoSpeak!==undefined) state.autoSpeak=remote.autoSpeak;
+      if(remote.auto) state.auto=remote.auto;
+    }
+    state.updatedAt = Math.max(state.updatedAt||0, remote.updatedAt||0);
+    localStorage.setItem(KEY, JSON.stringify(state));  // 保存（バンプ/再送なし）
+  } finally { applyingRemote=false; }
+  refreshAll(); if(mode!=="auto") nextCard();
+}
+async function pushCloud(){
+  if(!fb || !fb.user) return;
+  try{
+    const {doc,setDoc}=fb.fs;
+    await setDoc(doc(fb.db,"users",fb.user.uid), {
+      words: state.words, quizCustom: state.quizCustom,
+      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto,
+      updatedAt: state.updatedAt||Date.now()
+    }, {merge:true});
+    setSyncStatus("同期済み ✓ "+new Date().toLocaleTimeString());
+  }catch(e){ setSyncStatus("同期エラー: "+(e&&e.message||e)); }
+}
+async function initFirebase(){
+  if(fb) return fb;
+  const base="https://www.gstatic.com/firebasejs/"+FB_VER+"/";
+  const appMod=await import(base+"firebase-app.js");
+  const authMod=await import(base+"firebase-auth.js");
+  const fsMod=await import(base+"firebase-firestore.js");
+  const app=appMod.initializeApp(FB_CONFIG);
+  const auth=authMod.getAuth(app);
+  const db=fsMod.getFirestore(app);
+  try{ await fsMod.enableIndexedDbPersistence(db); }catch(e){}
+  fb={app, auth, db, user:null, unsub:null, auth_m:authMod, fs:fsMod};
+  authMod.onAuthStateChanged(auth, onAuth);
+  try{ await authMod.getRedirectResult(auth); }catch(e){}
+  return fb;
+}
+async function onAuth(u){
+  if(!fb) return;
+  if(u){
+    fb.user=u;
+    localStorage.setItem("accaSync","1");
+    setSyncUI(true, u);
+    setSyncStatus("接続中: "+(u.email||"ログイン済み"));
+    const {doc,getDoc,onSnapshot}=fb.fs;
+    try{
+      const snap=await getDoc(doc(fb.db,"users",u.uid));
+      if(snap.exists()) applyRemote(snap.data());
+      schedulePush();  // ローカル（マージ済み）をクラウドへ
+      if(fb.unsub) fb.unsub();
+      fb.unsub=onSnapshot(doc(fb.db,"users",u.uid), (s)=>{
+        if(s.metadata && s.metadata.hasPendingWrites) return;  // 自分の書き込みは無視
+        if(s.exists()) applyRemote(s.data());
+      });
+      setSyncStatus("同期オン: "+(u.email||"ログイン済み"));
+    }catch(e){ setSyncStatus("読み込みエラー: "+(e&&e.message||e)); }
+  } else {
+    fb.user=null; setSyncUI(false);
+    setSyncStatus("未接続（この端末内だけに保存中）");
+  }
+}
+async function syncLogin(){
+  if(!SYNC_READY){ alert("同期の初期設定がまだ完了していません。Firebaseの設定が入り次第、使えるようになります。"); return; }
+  setSyncStatus("接続中…");
+  try{
+    await initFirebase();
+    const {GoogleAuthProvider, signInWithPopup, signInWithRedirect}=fb.auth_m;
+    const prov=new GoogleAuthProvider();
+    try{ await signInWithPopup(fb.auth, prov); }
+    catch(e){ await signInWithRedirect(fb.auth, prov); }
+  }catch(e){ setSyncStatus("ログイン失敗: "+(e&&e.message||e)); }
+}
+async function syncLogout(){
+  try{
+    if(fb && fb.unsub){ fb.unsub(); fb.unsub=null; }
+    if(fb){ const {signOut}=fb.auth_m; await signOut(fb.auth); }
+  }catch(e){}
+  localStorage.removeItem("accaSync");
+  setSyncUI(false);
+  setSyncStatus("ログアウトしました（この端末内だけに保存中）");
+}
+(function(){
+  const l=document.getElementById("syncLogin");
+  if(l) l.onclick=syncLogin;
+  const o=document.getElementById("syncLogout"); if(o) o.onclick=syncLogout;
+  const n=document.getElementById("syncNow"); if(n) n.onclick=()=>{ setSyncStatus("同期中…"); pushCloud(); };
+  if(!SYNC_READY){
+    setSyncStatus("同期は準備中です（設定が入り次第、使えます）。今はこの端末内だけに保存されます。");
+    if(l){ l.disabled=true; l.style.opacity="0.5"; }
+  } else if(localStorage.getItem("accaSync")==="1"){
+    initFirebase();  // 前回ログイン済み → 自動で再接続
+  }
+})();
 
 /* ========== init ========== */
 renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz();
