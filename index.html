@@ -444,6 +444,7 @@ function normalize(s){
   if(s.rate===undefined){ s.rate = 0.95; }
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
+  if(!s.deleted){ s.deleted = {}; }   // 削除した単語の記録（他端末で復活させないため）
   if(s.updatedAt===undefined){ s.updatedAt = 0; }
   return s;
 }
@@ -610,7 +611,7 @@ function nextCard(){
   renderStats(); renderWordTable();
   const sa=document.getElementById("studyAll"); if(sa) sa.remove();
   let q;
-  if(mode==="later"){ q=laterList().filter(w=>!seen.has(w)); }
+  if(mode==="later"){ q=laterList().filter(w=>!seen.has((w.en||"").toLowerCase())); }
   else { q=dueList().sort((a,b)=>(a.due||0)-(b.due||0)); }
   if(q.length===0){
     const msg = mode==="later"
@@ -630,7 +631,7 @@ function nextCard(){
     }
     return;
   }
-  const w=q[0]; if(mode==="later") seen.add(w);
+  const w=q[0]; if(mode==="later") seen.add((w.en||"").toLowerCase());
   showCard(w);
 }
 function setMode(m){
@@ -805,7 +806,14 @@ function renderWordTable(){
   </tr>`).join("");
   document.getElementById("wordTable").innerHTML=`<tr><th>English</th><th>日本語</th><th>状態</th><th>操作</th></tr>${rows}`;
 }
-window.delWord=function(i){ if(confirm("削除しますか？")){ state.words.splice(i,1); save(state); renderStats(); renderWordTable(); } };
+window.delWord=function(i){
+  if(!confirm("削除しますか？")) return;
+  const w=state.words[i]; if(!w) return;
+  if(!state.deleted) state.deleted={};
+  state.deleted[(w.en||"").toLowerCase().trim()]=Date.now();  // 他端末でも消えるように記録
+  state.words.splice(i,1);
+  save(state); renderStats(); renderWordTable();
+};
 window.toggleLater=function(i){
   const w=state.words[i]; if(!w) return;
   if(w.later){ w.later=false; delete w.laterDue; }
@@ -874,7 +882,10 @@ document.getElementById("imp").onchange=(e)=>{
 document.getElementById("mergeSeed").onclick=()=>{
   const have=new Set(state.words.map(w=>w.en.toLowerCase()));
   let added=0;
-  SEED_WORDS.forEach(w=>{ if(!have.has(w[0].toLowerCase())){ state.words.push(freshWord(w)); added++; } });
+  SEED_WORDS.forEach(w=>{ if(!have.has(w[0].toLowerCase())){
+    const nw=freshWord(w); nw.mtime=Date.now();   // 明示的な取り込みは削除記録より優先
+    state.words.push(nw); added++;
+  } });
   save(state); refreshAll(); alert(added+" 語を追加しました");
 };
 document.getElementById("resetProg").onclick=()=>{
@@ -913,12 +924,19 @@ function setSyncUI(on, u){
   if(n) n.style.display=on?"":"none";
   if(o) o.style.display=on?"":"none";
 }
-function mergeWords(a,b){
+function mergeDeleted(a,b){
+  const out=Object.assign({}, a||{});
+  Object.keys(b||{}).forEach(k=>{ if(!out[k] || b[k]>out[k]) out[k]=b[k]; });
+  return out;
+}
+function mergeWords(a,b,deleted){
   const map=new Map();
   const put=(w)=>{ const k=(w&&w.en||"").toLowerCase().trim(); if(!k) return;
     const ex=map.get(k); if(!ex || (w.mtime||0)>=(ex.mtime||0)) map.set(k,w); };
   (a||[]).forEach(put); (b||[]).forEach(put);
-  return Array.from(map.values());
+  const del=deleted||{};
+  // 削除より後に追加/更新された単語だけ残す（＝消したものは復活しない）
+  return Array.from(map.entries()).filter(([k,w])=>!(del[k] && del[k]>(w.mtime||0))).map(([k,w])=>w);
 }
 function mergeQuiz(a,b){
   const map=new Map();
@@ -928,8 +946,10 @@ function mergeQuiz(a,b){
 function applyRemote(remote){
   if(!remote) return;
   applyingRemote=true;
+  const before=state.words.length;
   try{
-    state.words = mergeWords(state.words, remote.words);
+    state.deleted = mergeDeleted(state.deleted, remote.deleted);
+    state.words = mergeWords(state.words, remote.words, state.deleted);
     state.quizCustom = mergeQuiz(state.quizCustom, remote.quizCustom);
     if((remote.updatedAt||0) > (state.updatedAt||0)){
       if(remote.rate!==undefined) state.rate=remote.rate;
@@ -939,14 +959,23 @@ function applyRemote(remote){
     state.updatedAt = Math.max(state.updatedAt||0, remote.updatedAt||0);
     localStorage.setItem(KEY, JSON.stringify(state));  // 保存（バンプ/再送なし）
   } finally { applyingRemote=false; }
-  refreshAll(); if(mode!=="auto") nextCard();
+  refreshAll();
+  const diff=state.words.length-before;
+  setSyncStatus("他の端末の変更を受信 ✓ "+new Date().toLocaleTimeString()+(diff?`（単語 ${diff>0?"+":""}${diff}）`:""));
+  if(mode==="auto") return;
+  if(cur){
+    // 学習中のカードは切り替えない。実体だけ新しいものに差し替える
+    const same=state.words.find(w=>(w.en||"").toLowerCase()===(cur.en||"").toLowerCase());
+    if(same){ cur=same; return; }
+  }
+  nextCard();
 }
 async function pushCloud(){
   if(!fb || !fb.user) return;
   try{
     const {doc,setDoc}=fb.fs;
     await setDoc(doc(fb.db,"users",fb.user.uid), {
-      words: state.words, quizCustom: state.quizCustom,
+      words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
       rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
