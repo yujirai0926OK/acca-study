@@ -286,6 +286,16 @@
         <button class="btn" id="exp">⬇️ 書き出し</button>
         <label class="btn sec" style="cursor:pointer;">⬆️ 読み込み<input type="file" id="imp" accept="application/json" hidden></label>
       </div>
+      <p class="muted" style="margin-top:6px;">※「読み込み」は<b>全データを置き換えます</b>（進捗も上書き）。端末をまるごと復元したい時に使ってください。</p>
+    </div>
+    <div class="card">
+      <p class="sec-title">📕 本棚だけを移す<span class="en">教科書の対訳をPC↔iPhoneで同じにする</span></p>
+      <p class="muted">本棚は<b>同期されません</b>（端末内・非公開のため）。同じにしたい時はこの2つを使ってください。<b>進捗・単語には一切影響しません。</b></p>
+      <div class="row">
+        <button class="btn" id="expPass">⬇️ 本棚だけ書き出し</button>
+        <label class="btn sec" style="cursor:pointer;">⬆️ 本棚を読み込み（追加）<input type="file" id="impPass" accept="application/json" hidden></label>
+      </div>
+      <p class="muted" id="passStat" style="margin-top:8px;"></p>
     </div>
     <div class="card">
       <p class="sec-title">メンテナンス</p>
@@ -879,6 +889,36 @@ document.getElementById("imp").onchange=(e)=>{
     else alert("形式が違います"); }catch(err){ alert("読み込めませんでした"); } };
   r.readAsText(f);
 };
+/* 本棚だけの受け渡し（クラウドには送らない・進捗や単語には触らない） */
+document.getElementById("expPass").onclick=()=>{
+  if(!state.passages.length){ alert("本棚がまだ空です。"); return; }
+  const blob=new Blob([JSON.stringify({type:"acca-bookshelf", passages:state.passages},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="acca-bookshelf.json"; a.click();
+};
+document.getElementById("impPass").onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      const list=Array.isArray(d)?d:(d.passages||[]);
+      if(!Array.isArray(list)||!list.length){ alert("本棚のデータが見つかりませんでした。"); return; }
+      let added=0, updated=0;
+      list.forEach(p=>{
+        if(!p || (!p.en && !p.ja)) return;
+        const title=p.title||"(無題)";
+        const ex=state.passages.find(x=>x.id&&x.id===p.id) || state.passages.find(x=>(x.title||"")===title);
+        if(ex){ ex.title=title; ex.en=p.en||""; ex.ja=p.ja||""; updated++; }
+        else { state.passages.unshift({id:p.id||uid(), title, en:p.en||"", ja:p.ja||""}); added++; }
+      });
+      save(state); renderPassages(); refreshAll();
+      alert(`本棚を読み込みました ✓\n新規 ${added} 件 ／ 同名を更新 ${updated} 件\n進捗・単語はそのままです。`);
+    }catch(err){ alert("読み込めませんでした（ファイルが壊れている可能性があります）"); }
+  };
+  r.readAsText(f);
+  e.target.value="";
+};
 document.getElementById("mergeSeed").onclick=()=>{
   const have=new Set(state.words.map(w=>w.en.toLowerCase()));
   let added=0;
@@ -896,6 +936,7 @@ document.getElementById("resetProg").onclick=()=>{
 function refreshAll(){
   renderStats(); renderWordTable(); renderPassages(); renderQuiz();
   document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
+  document.getElementById("passStat").textContent=`この端末の本棚：${state.passages.length} 件`;
 }
 
 /* ========== クラウド同期（Firebase・任意/オプトイン） ========== */
