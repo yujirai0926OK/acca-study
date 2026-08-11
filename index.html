@@ -994,7 +994,14 @@ async function initFirebase(){
   try{ await fsMod.enableIndexedDbPersistence(db); }catch(e){}
   fb={app, auth, db, user:null, unsub:null, auth_m:authMod, fs:fsMod};
   authMod.onAuthStateChanged(auth, onAuth);
-  try{ await authMod.getRedirectResult(auth); }catch(e){}
+  // 画面遷移方式でGoogleから戻ってきた場合、ここで結果を受け取る
+  try{
+    const rr=await authMod.getRedirectResult(auth);
+    if(rr && rr.user) localStorage.setItem("accaSync","1");
+  }catch(e){
+    setSyncStatus("ログイン失敗: "+(e&&e.code||"")+" "+(e&&e.message||e));
+  }
+  localStorage.removeItem("accaSyncPending");
   return fb;
 }
 async function onAuth(u){
@@ -1018,19 +1025,35 @@ async function onAuth(u){
     }catch(e){ setSyncStatus("読み込みエラー: "+(e&&e.message||e)); }
   } else {
     fb.user=null; setSyncUI(false);
-    setSyncStatus("未接続（この端末内だけに保存中）");
+    // 画面遷移方式で戻ってくる途中は「未接続」と出さない（結果待ちのため）
+    if(localStorage.getItem("accaSyncPending")==="1") setSyncStatus("ログイン結果を確認しています…");
+    else setSyncStatus("未接続（この端末内だけに保存中）");
   }
 }
-async function syncLogin(){
-  if(!SYNC_READY){ alert("同期の初期設定がまだ完了していません。Firebaseの設定が入り次第、使えるようになります。"); return; }
-  setSyncStatus("接続中…");
-  try{
-    await initFirebase();
-    const {GoogleAuthProvider, signInWithPopup, signInWithRedirect}=fb.auth_m;
-    const prov=new GoogleAuthProvider();
-    try{ await signInWithPopup(fb.auth, prov); }
-    catch(e){ await signInWithRedirect(fb.auth, prov); }
-  }catch(e){ setSyncStatus("ログイン失敗: "+(e&&e.message||e)); }
+/* ボタンを押した瞬間にポップアップを開く必要がある（待つとSafariにブロックされる）。
+   そのため準備が済んでいない場合は、その場でログインせず「もう一度押してください」に倒す。 */
+function syncLogin(){
+  if(!SYNC_READY){ alert("同期の初期設定がまだ完了していません。"); return; }
+  if(!fb || !fb.auth_m){
+    setSyncStatus("同期の準備をしています… 数秒後にもう一度押してください");
+    initFirebase()
+      .then(()=>{ if(!fb.user) setSyncStatus("準備できました。もう一度ボタンを押してください"); })
+      .catch(e=>setSyncStatus("準備に失敗: "+(e&&e.message||e)+"（通信環境をご確認ください）"));
+    return;
+  }
+  const {GoogleAuthProvider, signInWithPopup, signInWithRedirect}=fb.auth_m;
+  const prov=new GoogleAuthProvider();
+  prov.setCustomParameters({prompt:"select_account"});
+  setSyncStatus("Googleのログイン画面を開いています…");
+  signInWithPopup(fb.auth, prov).catch(e=>{
+    // ポップアップが塞がれた場合は画面遷移方式へ（戻ってきたら結果を受け取る目印を残す）
+    setSyncStatus("別画面でログインします…（"+(e&&e.code||"popup")+"）");
+    localStorage.setItem("accaSyncPending","1");
+    signInWithRedirect(fb.auth, prov).catch(e2=>{
+      localStorage.removeItem("accaSyncPending");
+      setSyncStatus("ログイン失敗: "+(e2&&e2.code||"")+" "+(e2&&e2.message||e2));
+    });
+  });
 }
 async function syncLogout(){
   try{
@@ -1049,9 +1072,18 @@ async function syncLogout(){
   if(!SYNC_READY){
     setSyncStatus("同期は準備中です（設定が入り次第、使えます）。今はこの端末内だけに保存されます。");
     if(l){ l.disabled=true; l.style.opacity="0.5"; }
-  } else if(localStorage.getItem("accaSync")==="1"){
-    initFirebase();  // 前回ログイン済み → 自動で再接続
+    return;
   }
+  // 読み込み時に先に用意しておく：
+  //  ・ボタンを押した瞬間にポップアップを開けるようにする（Safariのブロック回避）
+  //  ・画面遷移方式でGoogleから戻ってきた場合、その結果をここで受け取る
+  const pending = localStorage.getItem("accaSyncPending")==="1";
+  const known   = localStorage.getItem("accaSync")==="1";
+  if(pending || known) setSyncStatus("ログイン状態を確認しています…");
+  initFirebase().catch(e=>{
+    localStorage.removeItem("accaSyncPending");
+    setSyncStatus("同期の準備に失敗しました: "+(e&&e.message||e)+"（オフラインでも学習は使えます）");
+  });
 })();
 
 /* ========== init ========== */
