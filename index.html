@@ -1130,6 +1130,7 @@ async function syncLogout(){
 /* ========== init ========== */
 renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz();
 document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
+document.getElementById("passStat").textContent=`この端末の本棚：${state.passages.length} 件`;
 </script>
 </body>
 </html>
