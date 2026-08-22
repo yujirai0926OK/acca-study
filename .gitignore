@@ -1,1 +1,4 @@
 node_modules/
+
+# 教科書の対訳（Kaplanの著作物を含む）。端末内に留める
+translations/
