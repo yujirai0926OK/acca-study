@@ -209,9 +209,9 @@
       </details>
     </div>
     <div class="card">
-      <details>
+      <div class="search"><input id="wordSearch" placeholder="🔍 単語を検索（英語・日本語・意味・例文）"></div>
+      <details id="listDetails" style="margin-top:10px;">
         <summary id="listSummary">📋 全単語リスト</summary>
-        <div class="search" style="margin-top:10px;"><input id="wordSearch" placeholder="🔍 単語を検索（英語・日本語・意味）"></div>
         <div style="overflow-x:auto;"><table id="wordTable"></table></div>
       </details>
     </div>
@@ -916,7 +916,7 @@ let wordQuery="";
 function renderWordTable(){
   document.getElementById("listSummary").textContent=`📋 全単語リスト（${state.words.length}語）`;
   const q=wordQuery.toLowerCase();
-  const items=state.words.map((w,i)=>({w,i})).filter(({w})=>!q || ((w.en||"")+(w.ja||"")+(w.def||"")).toLowerCase().includes(q));
+  const items=state.words.map((w,i)=>({w,i})).filter(({w})=>!q || ((w.en||"")+(w.ja||"")+(w.def||"")+(w.ex||"")).toLowerCase().includes(q));
   if(items.length===0){
     document.getElementById("wordTable").innerHTML=`<tr><td class="muted">「${esc(wordQuery)}」に一致する単語はありません。</td></tr>`;
     return;
@@ -947,7 +947,7 @@ window.toggleLater=function(i){
   w.mtime=Date.now();
   save(state); renderStats(); renderWordTable();
 };
-document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; renderWordTable(); };
+document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; if(wordQuery) document.getElementById("listDetails").open=true; renderWordTable(); };
 
 /* ========== quiz (built-in + custom) ========== */
 function allQuiz(){ return QUIZ.concat(state.quizCustom); }
