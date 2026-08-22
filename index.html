@@ -88,6 +88,20 @@
   .pcard summary{display:flex; justify-content:space-between; align-items:center; gap:8px;}
   .pcard .ptitle{color:var(--teal);}
   .pbtns{display:flex; gap:6px; margin:10px 0;}
+    /* 語をタップして訳を見る */
+    .bi .en li, .bi .en{ -webkit-tap-highlight-color:rgba(15,118,110,.12); }
+    #lookup{ position:absolute; z-index:60; width:max-content; max-width:min(340px,88vw);
+      background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:12px;
+      box-shadow:0 8px 24px rgba(0,0,0,.18); padding:12px 14px; font-size:14px; line-height:1.6; }
+    #lookup[hidden]{ display:none; }
+    #lookup .lk-en{ font-weight:700; }
+    #lookup .lk-ja{ color:var(--teal); font-weight:700; margin-top:2px; }
+    #lookup .lk-def{ color:var(--sub); font-size:13px; margin-top:6px; }
+    #lookup .lk-ex{ color:var(--sub); font-size:12px; font-style:italic; margin-top:6px; }
+    #lookup .lk-miss{ color:var(--sub); font-size:13px; margin-top:4px; }
+    #lookup .lk-bar{ display:flex; gap:8px; align-items:center; margin-top:10px; }
+    #lookup .lk-bar .btn{ padding:4px 10px; font-size:12px; }
+    #lookup .lk-x{ margin-left:auto; }
 </style>
 </head>
 <body>
@@ -312,6 +326,8 @@
     </div>
   </section>
 </main>
+
+<div id="lookup" hidden></div>
 
 <script>
 "use strict";
@@ -1242,6 +1258,156 @@ async function syncLogout(){
     setSyncStatus("同期の準備に失敗しました: "+(e&&e.message||e)+"（オフラインでも学習は使えます）");
   });
 })();
+
+/* ========== reader: 語をタップして訳を見る ========== */
+const LK=document.getElementById("lookup");
+let lkDict=null, lkDictLen=-1;
+function dictIndex(){
+  if(lkDict && lkDictLen===state.words.length) return lkDict;
+  lkDict=new Map();
+  state.words.forEach(w=>{ const k=(w.en||"").trim().toLowerCase(); if(k && !lkDict.has(k)) lkDict.set(k,w); });
+  lkDictLen=state.words.length;
+  return lkDict;
+}
+function lkVariants(q){
+  const v=[q];
+  if(q.length>3){
+    if(/ies$/.test(q)) v.push(q.slice(0,-3)+"y");
+    if(/es$/.test(q)) v.push(q.slice(0,-2));
+    if(/s$/.test(q)) v.push(q.slice(0,-1));
+    if(/ed$/.test(q)){ v.push(q.slice(0,-2)); v.push(q.slice(0,-1)); }
+    if(/ing$/.test(q)){ v.push(q.slice(0,-3)); v.push(q.slice(0,-3)+"e"); }
+    if(/ly$/.test(q)) v.push(q.slice(0,-2));
+  }
+  return v;
+}
+function lkTokens(text){
+  const out=[], re=/[A-Za-z][A-Za-z'’-]*/g; let m;
+  while((m=re.exec(text))!==null) out.push({w:m[0], s:m.index, e:m.index+m[0].length});
+  return out;
+}
+function lkByPhrase(phrase){
+  const d=dictIndex(), key=phrase.trim().toLowerCase().replace(/\s+/g," ");
+  if(d.has(key)) return d.get(key);
+  for(const v of lkVariants(key)) if(d.has(v)) return d.get(v);
+  return null;
+}
+function lkPartial(word){
+  const d=dictIndex(); let best=null;
+  if(word.length<4) return null;
+  d.forEach((val,key)=>{
+    if(key===word) return;
+    const parts=key.split(" ");
+    if(parts.indexOf(word)>=0 && (!best || parts.length<best.n)) best={n:parts.length, val:val};
+  });
+  return best? best.val : null;
+}
+function lkInText(word){
+  if(word.length<4) return null;
+  const re=new RegExp("(^|[^A-Za-z])"+word+"([^A-Za-z]|$)","i");
+  let hit=null;
+  dictIndex().forEach(function(val){
+    if(hit) return;
+    if(re.test((val.def||"")+" "+(val.ex||""))) hit=val;
+  });
+  return hit;
+}
+function lkFind(tokens,k){
+  const d=dictIndex();
+  for(let len=4; len>=1; len--){
+    for(let st=Math.max(0,k-len+1); st<=k && st+len<=tokens.length; st++){
+      const phrase=tokens.slice(st,st+len).map(function(t){return t.w;}).join(" ").toLowerCase();
+      if(d.has(phrase)) return d.get(phrase);
+    }
+  }
+  const w=tokens[k].w.toLowerCase();
+  for(const v of lkVariants(w)) if(d.has(v)) return d.get(v);
+  return lkPartial(w) || lkInText(w);
+}
+function lkCaret(x,y){
+  if(document.caretRangeFromPoint){
+    const r=document.caretRangeFromPoint(x,y);
+    if(r) return {node:r.startContainer, off:r.startOffset};
+  }
+  if(document.caretPositionFromPoint){
+    const p=document.caretPositionFromPoint(x,y);
+    if(p) return {node:p.offsetNode, off:p.offset};
+  }
+  return null;
+}
+function lkHide(){ LK.hidden=true; LK.innerHTML=""; }
+function lkShow(rect,html){
+  LK.innerHTML=html; LK.hidden=false; LK.style.left="0px";
+  const top=window.scrollY+rect.bottom+8;
+  let left=window.scrollX+rect.left;
+  const max=window.scrollX+document.documentElement.clientWidth-LK.offsetWidth-10;
+  const min=window.scrollX+10;
+  if(left>max) left=max;
+  if(left<min) left=min;
+  LK.style.top=top+"px"; LK.style.left=left+"px";
+}
+function lkCard(term,entry){
+  const t=esc(term);
+  if(!entry){
+    return '<div class="lk-en">'+t+'</div>'
+      +'<div class="lk-miss">この語はまだ単語帳にありません。</div>'
+      +'<div class="lk-bar"><button class="btn ghost" data-lk-speak="'+t+'">🔊 読み上げ</button>'
+      +'<button class="btn sec" data-lk-add="'+t+'">＋ 単語帳に追加</button>'
+      +'<button class="btn ghost lk-x" data-lk-close="1">✕</button></div>';
+  }
+  let h='<div class="lk-en">'+esc(entry.en)+'</div><div class="lk-ja">'+esc(entry.ja||"")+'</div>';
+  if(entry.def) h+='<div class="lk-def">'+esc(entry.def)+'</div>';
+  if(entry.ex) h+='<div class="lk-ex">'+esc(entry.ex)+'</div>';
+  h+='<div class="lk-bar"><button class="btn ghost" data-lk-speak="'+esc(entry.en)+'">🔊 読み上げ</button>'
+    +'<button class="btn ghost lk-x" data-lk-close="1">✕</button></div>';
+  return h;
+}
+document.getElementById("reader").addEventListener("click",function(ev){
+  if(LK.contains(ev.target)) return;
+  if(ev.target.closest(".spk,.btn,summary,input,textarea,select,.lbl")) return;
+  const zone=ev.target.closest(".bi .en");
+  if(!zone){ lkHide(); return; }
+  const sel=window.getSelection();
+  const picked=sel && !sel.isCollapsed ? String(sel).trim() : "";
+  if(picked && picked.length<=60 && /[A-Za-z]/.test(picked)){
+    const r=sel.getRangeAt(0).getBoundingClientRect();
+    lkShow(r, lkCard(picked, lkByPhrase(picked) || lkPartial(picked.toLowerCase()) || lkInText(picked.toLowerCase())));
+    return;
+  }
+  const c=lkCaret(ev.clientX, ev.clientY);
+  if(!c || !c.node || c.node.nodeType!==3){ lkHide(); return; }
+  const text=c.node.data, toks=lkTokens(text);
+  let k=-1;
+  for(let i=0;i<toks.length;i++){ if(c.off>=toks[i].s && c.off<=toks[i].e){ k=i; break; } }
+  if(k<0){ lkHide(); return; }
+  const rg=document.createRange();
+  rg.setStart(c.node, toks[k].s); rg.setEnd(c.node, toks[k].e);
+  lkShow(rg.getBoundingClientRect(), lkCard(toks[k].w, lkFind(toks,k)));
+});
+function lkAddWord(term){
+  lkHide();
+  const nav=document.querySelector('nav button[data-v="cards"]');
+  if(nav) nav.click();
+  const en=document.getElementById("aEn"), det=en.closest("details");
+  if(det) det.open=true;
+  en.value=term;
+  document.getElementById("aJa").value="";
+  document.getElementById("aDef").value="";
+  document.getElementById("aEx").value="";
+  det.scrollIntoView({block:"center"});
+  document.getElementById("aJa").focus();
+}
+LK.addEventListener("click",function(ev){
+  const a=ev.target.closest("[data-lk-add]");
+  if(a){ lkAddWord(a.getAttribute("data-lk-add")); return; }
+  const s=ev.target.closest("[data-lk-speak]");
+  if(s){ speak(s.getAttribute("data-lk-speak")); return; }
+  if(ev.target.closest("[data-lk-close]")) lkHide();
+});
+document.addEventListener("click",function(ev){
+  if(!LK.hidden && !LK.contains(ev.target) && !ev.target.closest("#reader")) lkHide();
+});
+document.addEventListener("keydown",function(ev){ if(ev.key==="Escape") lkHide(); });
 
 /* ========== init ========== */
 renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz();
