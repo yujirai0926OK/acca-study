@@ -99,7 +99,10 @@
     #lookup .lk-def{ color:var(--sub); font-size:13px; margin-top:6px; }
     #lookup .lk-ex{ color:var(--sub); font-size:12px; font-style:italic; margin-top:6px; }
     #lookup .lk-miss{ color:var(--sub); font-size:13px; margin-top:4px; }
-    #lookup .lk-bar{ display:flex; gap:8px; align-items:center; margin-top:10px; }
+    #lookup .lk-bar{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+    .askrow{ display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
+    .askrow span{ flex:1; font-weight:600; word-break:break-word; }
+    .askrow .btn{ padding:4px 10px; font-size:12px; }
     #lookup .lk-bar .btn{ padding:4px 10px; font-size:12px; }
     #lookup .lk-x{ margin-left:auto; }
 </style>
@@ -228,6 +231,14 @@
         <summary id="listSummary">📋 全単語リスト</summary>
         <div style="overflow-x:auto;"><table id="wordTable"></table></div>
       </details>
+    </div>
+    <div class="card">
+      <p class="sec-title">🔖 あとで聞く<span class="en">わからない語を溜めて、あとでまとめて解説してもらう</span></p>
+      <div id="askList"></div>
+      <div class="row" id="askTools" style="margin-top:12px; display:none;">
+        <button class="btn" id="askCopy">📋 コピー</button>
+        <button class="btn ghost" id="askClear">全部消す</button>
+      </div>
     </div>
   </section>
 
@@ -583,6 +594,7 @@ function normalize(s){
     if(s.my && (s.my.en || s.my.ja)){ s.passages.push({id:uid(), title:"以前のマイ対訳", en:s.my.en||"", ja:s.my.ja||""}); }
   }
   if(!s.quizCustom){ s.quizCustom = []; }
+  if(!s.askLater){ s.askLater = []; }
   if(s.rate===undefined){ s.rate = 0.95; }
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
@@ -1066,7 +1078,7 @@ document.getElementById("resetProg").onclick=()=>{
   }
 };
 function refreshAll(){
-  renderStats(); renderWordTable(); renderPassages(); renderQuiz();
+  renderStats(); renderWordTable(); renderPassages(); renderQuiz(); renderAsk();
   document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
   document.getElementById("passStat").textContent=`この端末の本棚：${state.passages.length} 件`;
 }
@@ -1111,6 +1123,11 @@ function mergeWords(a,b,deleted){
   // 削除より後に追加/更新された単語だけ残す（＝消したものは復活しない）
   return Array.from(map.entries()).filter(([k,w])=>!(del[k] && del[k]>(w.mtime||0))).map(([k,w])=>w);
 }
+function mergeAsk(a,b){
+  const map=new Map();
+  (a||[]).concat(b||[]).forEach(x=>{ const k=(x&&x.en||"").toLowerCase().trim(); if(k && !map.has(k)) map.set(k,x); });
+  return Array.from(map.values());
+}
 function mergeQuiz(a,b){
   const map=new Map();
   (a||[]).concat(b||[]).forEach(q=>{ const k=(q&&q.q||"").trim(); if(k && !map.has(k)) map.set(k,q); });
@@ -1124,6 +1141,7 @@ function applyRemote(remote){
     state.deleted = mergeDeleted(state.deleted, remote.deleted);
     state.words = mergeWords(state.words, remote.words, state.deleted);
     state.quizCustom = mergeQuiz(state.quizCustom, remote.quizCustom);
+    state.askLater = mergeAsk(state.askLater, remote.askLater);
     if((remote.updatedAt||0) > (state.updatedAt||0)){
       if(remote.rate!==undefined) state.rate=remote.rate;
       if(remote.autoSpeak!==undefined) state.autoSpeak=remote.autoSpeak;
@@ -1149,6 +1167,7 @@ async function pushCloud(){
     const {doc,setDoc}=fb.fs;
     await setDoc(doc(fb.db,"users",fb.user.uid), {
       words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
+      askLater: state.askLater||[],
       rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
@@ -1352,13 +1371,15 @@ function lkCard(term,entry){
     return '<div class="lk-en">'+t+'</div>'
       +'<div class="lk-miss">この語はまだ単語帳にありません。</div>'
       +'<div class="lk-bar"><button class="btn ghost" data-lk-speak="'+t+'">🔊 読み上げ</button>'
-      +'<button class="btn sec" data-lk-add="'+t+'">＋ 単語帳に追加</button>'
+      +'<button class="btn sec" data-lk-ask="'+t+'">🔖 あとで聞く</button>'
+      +'<button class="btn ghost" data-lk-add="'+t+'">＋ 単語帳に追加</button>'
       +'<button class="btn ghost lk-x" data-lk-close="1">✕</button></div>';
   }
   let h='<div class="lk-en">'+esc(entry.en)+'</div><div class="lk-ja">'+esc(entry.ja||"")+'</div>';
   if(entry.def) h+='<div class="lk-def">'+esc(entry.def)+'</div>';
   if(entry.ex) h+='<div class="lk-ex">'+esc(entry.ex)+'</div>';
   h+='<div class="lk-bar"><button class="btn ghost" data-lk-speak="'+esc(entry.en)+'">🔊 読み上げ</button>'
+    +'<button class="btn ghost" data-lk-ask="'+esc(entry.en)+'">🔖 あとで聞く</button>'
     +'<button class="btn ghost lk-x" data-lk-close="1">✕</button></div>';
   return h;
 }
@@ -1398,6 +1419,8 @@ function lkAddWord(term){
   document.getElementById("aJa").focus();
 }
 LK.addEventListener("click",function(ev){
+  const q=ev.target.closest("[data-lk-ask]");
+  if(q){ askAdd(q.getAttribute("data-lk-ask")); return; }
   const a=ev.target.closest("[data-lk-add]");
   if(a){ lkAddWord(a.getAttribute("data-lk-add")); return; }
   const s=ev.target.closest("[data-lk-speak]");
@@ -1409,8 +1432,47 @@ document.addEventListener("click",function(ev){
 });
 document.addEventListener("keydown",function(ev){ if(ev.key==="Escape") lkHide(); });
 
+/* ========== 🔖 あとで聞く ========== */
+function renderAsk(){
+  const box=document.getElementById("askList"), n=state.askLater.length;
+  document.getElementById("askTools").style.display = n? "flex" : "none";
+  if(!n){ box.innerHTML='<p class="muted">リーダーで語をタップし、「🔖 あとで聞く」を押すとここに溜まります。</p>'; return; }
+  box.innerHTML=state.askLater.map(function(a,i){
+    return '<div class="askrow"><span>'+esc(a.en)+'</span><button class="btn ghost" data-ask-del="'+i+'">削除</button></div>';
+  }).join("");
+  document.getElementById("askCopy").textContent="📋 コピー（"+n+"語）";
+}
+function askAdd(term){
+  const t=(term||"").trim();
+  if(!t){ lkHide(); return; }
+  const k=t.toLowerCase();
+  if(!state.askLater.some(function(a){ return (a.en||"").toLowerCase()===k; })){
+    state.askLater.push({en:t, at:Date.now()});
+    save(state); renderAsk();
+  }
+  lkHide();
+}
+document.getElementById("askList").addEventListener("click",function(ev){
+  const b=ev.target.closest("[data-ask-del]");
+  if(!b) return;
+  state.askLater.splice(+b.getAttribute("data-ask-del"),1);
+  save(state); renderAsk();
+});
+document.getElementById("askCopy").onclick=function(){
+  const txt=state.askLater.map(function(a){ return a.en; }).join(String.fromCharCode(10));
+  const done=function(){ const b=document.getElementById("askCopy"); const o=b.textContent; b.textContent="コピーしました ✓"; setTimeout(function(){ renderAsk(); },1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ window.prompt("コピーしてください", txt); });
+  } else { window.prompt("コピーしてください", txt); }
+};
+document.getElementById("askClear").onclick=function(){
+  if(!state.askLater.length) return;
+  if(!confirm("あとで聞くリストを全部消します。よろしいですか？")) return;
+  state.askLater=[]; save(state); renderAsk();
+};
+
 /* ========== init ========== */
-renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz();
+renderSections(); renderPassages(); renderStats(); renderWordTable(); renderQuiz(); renderAsk();
 document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
 document.getElementById("passStat").textContent=`この端末の本棚：${state.passages.length} 件`;
 </script>
