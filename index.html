@@ -244,14 +244,26 @@
 
   <!-- QUIZ -->
   <section id="quiz" class="view">
-    <h2 class="vh">確認テスト（第1章＋自作問題）</h2>
+    <h2 class="vh" id="quizHeading">確認テスト</h2>
+    <div class="row" id="quizModeRow" style="justify-content:center; margin-bottom:10px; flex-wrap:wrap;">
+      <button class="btn sec" data-qm="concept">📘 論点</button>
+      <button class="btn ghost" data-qm="en2ja">EN → 日本語</button>
+      <button class="btn ghost" data-qm="ja2en">日本語 → EN</button>
+    </div>
+    <div class="row" id="quizLangRow" style="justify-content:center; margin-bottom:10px;">
+      <button class="btn ghost" data-ql="ja">日本語で出題</button>
+      <button class="btn ghost" data-ql="en">English</button>
+    </div>
+    <div class="row" id="wordQuizTools" style="justify-content:center; margin-bottom:10px; display:none;">
+      <button class="btn" id="newWordQuiz">🔄 別の10問を出す</button>
+    </div>
     <div id="quizList"></div>
     <div class="card" id="quizScore" style="text-align:center; display:none;">
       <p class="sec-title" style="justify-content:center;">スコア</p>
       <p id="scoreText" style="font-size:24px; font-weight:800; margin:4px 0;"></p>
       <button class="btn sec" id="retry">もう一度</button>
     </div>
-    <div class="card">
+    <div class="card" id="addQuizCard">
       <details>
         <summary>＋ 自分で問題を追加（4択）</summary>
         <div class="field"><span class="lbl">問題文</span><input id="qQ" placeholder="例: 継続企業の前提とは？"></div>
@@ -909,6 +921,8 @@ function normalize(s){
   }
   if(!s.quizCustom){ s.quizCustom = []; }
   if(!s.askLater){ s.askLater = []; }
+  if(!s.quizMode){ s.quizMode = "concept"; }
+  if(!s.quizLang){ s.quizLang = "ja"; }
   if(s.rate===undefined){ s.rate = 0.95; }
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
@@ -951,6 +965,63 @@ document.querySelectorAll("nav button").forEach(b=>{
 });
 
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+const QUIZ_EN = [
+ {q:"What liability does a sole trader have for the debts of the business?",
+  opts:["Limited to the amount invested","Unlimited, extending to personal assets","No liability at all","Joint liability with other traders only"],
+  ex:"A sole trader is not legally distinguished from the business, so the liability is unlimited."},
+ {q:"Which of the following is an enhancing qualitative characteristic?",
+  opts:["Relevance","Faithful representation","Comparability","Materiality"],
+  ex:"The enhancing ones are comparability, verifiability, timeliness and understandability. Relevance and faithful representation are fundamental."},
+ {q:"Which statement describes the accruals concept?",
+  opts:["Income is recorded when cash is received","Income is recorded when it is earned, whatever the timing of cash","Everything is recorded at the year end","Expenses are recorded only when paid"],
+  ex:"Accruals accounting records income when earned and expenses when incurred, regardless of cash movements."},
+ {q:"How is equity defined?",
+  opts:["Assets plus liabilities","Assets minus liabilities","Liabilities minus assets","Income minus expenses"],
+  ex:"Equity is the residual interest in the assets after deducting the liabilities."},
+ {q:"How is a loan repayable in two years classified?",
+  opts:["Current asset","Current liability","Non-current liability","Equity"],
+  ex:"It is settled more than twelve months after the reporting date, so it is a non-current liability."},
+ {q:"Which is an example of substance over form?",
+  opts:["Treating redeemable preference shares as a liability","Carrying land at historical cost","Recording a sale when cash is received","Offsetting inventory balances"],
+  ex:"Although legally shares, there is an obligation to repay, so the substance is that of a liability."},
+ {q:"What does the going concern assumption mean?",
+  opts:["The entity will be liquidated within a year","The entity will continue in operation for the foreseeable future","The entity will certainly make a profit","The entity will always hold plenty of cash"],
+  ex:"There is no intention or need to liquidate or curtail operations, normally looking ahead at least twelve months."},
+ {q:"How is offsetting treated?",
+  opts:["It is always encouraged","It is not permitted, apart from limited exceptions","It is allowed for current items only","It is allowed for equity items only"],
+  ex:"Netting off reduces the information available to users, so amounts are presented gross and separately."},
+ {q:"Which user requires the most detailed financial information to be made available to them?",
+  opts:["Competitors","Management of an entity","Trade unions","Investors"],
+  ex:"Managers need costs by product and by division to run the business day to day. They obtain this from management accounts, not from the published financial statements."},
+ {q:"Which of these is not a primary user under the Conceptual Framework?",
+  opts:["Investors","Lenders","Other creditors","Employees"],
+  ex:"The primary users are investors, lenders and other creditors. Employees, government and management are excluded because they have other ways of obtaining information, not because they have no need for it."},
+ {q:"In long-term loans may be backed by security, what does security mean?",
+  opts:["Marketable securities","Collateral","Safety","Physical protection"],
+  ex:"Uncountable security means collateral. The plural securities means investments. The security in secure employment is job stability, which is different again."},
+ {q:"Which sentence is grammatically correct?",
+  opts:["The director, along with two staff, were present.","The director, along with two staff, was present.","Identify what are their requirements.","Decisions about if to invest."],
+  ex:"Along with does not form part of the subject, so the verb agrees with director. Indirect questions keep statement word order. After a preposition, use whether rather than if."},
+ {q:"In a British text, what does scheme mean in pension scheme?",
+  opts:["A plot or trick","An arrangement or system","A diagram","A timetable"],
+  ex:"In British English scheme is a neutral word for an arrangement, without the negative sense it carries in American usage. Recycling scheme and share option scheme work the same way."},
+ {q:"In Shareholders enjoy limited liability, what does enjoy mean?",
+  opts:["To take pleasure in","To have or benefit from","To expect","To give up"],
+  ex:"In formal English, to enjoy something means to have or hold it. Enjoy a good reputation works the same way."},
+ {q:"Which statement describes stewardship?",
+  opts:["Providing information useful for future investment decisions","The responsibility of management for the resources entrusted to them","Making accounting standards uniform across countries","The work of costing a company's own products"],
+  ex:"It is the accountability that arises from the separation of ownership and control, and stands alongside decision-usefulness as the second objective of financial reporting."},
+ {q:"Which statement about management accounts is not correct?",
+  opts:["They are produced for managers at frequent intervals","They may be presented by division or by product","They are audited and made public","They may include budgets and forecasts"],
+  ex:"Management accounts are internal and are neither audited nor published. It is the annual financial statements that are audited and filed."},
+ {q:"Which statement about as follows and as shown is correct?",
+  opts:["As follow is written without the s","As follows points to the list that comes next","As shown can only point backwards","They are interchangeable in every context"],
+  ex:"As follows keeps its s whatever the subject, and introduces a list that follows. As shown can point either way, using below or above."},
+ {q:"Why does a new supplier look at the financial statements before trading?",
+  opts:["To estimate the return on an investment","To judge whether it will be paid","To check that supply will continue","To calculate taxable profit"],
+  ex:"A supplier is an unsecured short-term creditor. With no trading history to go on, the published financial statements are in practice the only evidence available."},
+];
 
 /* ========== reader: sections ========== */
 function renderSections(){
@@ -1293,31 +1364,97 @@ document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; i
 
 /* ========== quiz (built-in + custom) ========== */
 function allQuiz(){ return QUIZ.concat(state.quizCustom); }
+let wqSet=null, wqDir=null;
+function buildWordQuiz(dir){
+  const pool=state.words.filter(function(w){ return (w.en||"").trim() && (w.ja||"").trim(); });
+  if(pool.length<4) return [];
+  const idx=pool.map(function(_,i){ return i; });
+  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+  const picked=idx.slice(0, Math.min(10, pool.length)).map(function(i){ return pool[i]; });
+  return picked.map(function(w){
+    const ask = dir==="en2ja" ? w.en : w.ja;
+    const ans = dir==="en2ja" ? w.ja : w.en;
+    const seen=new Set([ans.toLowerCase()]), others=[];
+    let guard=0;
+    while(others.length<3 && guard<400){
+      guard++;
+      const o=pool[Math.floor(Math.random()*pool.length)];
+      const v=(dir==="en2ja" ? o.ja : o.en)||"";
+      const k=v.toLowerCase();
+      if(!v || seen.has(k)) continue;
+      seen.add(k); others.push(v);
+    }
+    const opts=others.concat([ans]);
+    for(let i=opts.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=opts[i]; opts[i]=opts[j]; opts[j]=t; }
+    let ex=w.def||"";
+    if(w.ex) ex=(ex?ex+"　":"")+w.ex;
+    if(dir==="ja2en" && w.en) ex=(ex?ex+"　":"")+"→ "+w.en;
+    return {q:ask, opts:opts, a:opts.indexOf(ans), ex:ex};
+  });
+}
 function renderQuiz(){
-  const arr=allQuiz(), total=arr.length;
+  const mode=state.quizMode||"concept", lang=state.quizLang||"ja";
+  document.querySelectorAll("#quizModeRow button").forEach(function(b){
+    b.className="btn "+(b.dataset.qm===mode ? "sec" : "ghost");
+  });
+  document.querySelectorAll("#quizLangRow button").forEach(function(b){
+    b.className="btn "+(b.dataset.ql===lang ? "sec" : "ghost");
+  });
+  const isConcept = mode==="concept";
+  document.getElementById("quizLangRow").style.display = isConcept ? "flex" : "none";
+  document.getElementById("wordQuizTools").style.display = isConcept ? "none" : "flex";
+  document.getElementById("addQuizCard").style.display = isConcept ? "" : "none";
+  document.getElementById("quizHeading").textContent =
+    isConcept ? "確認テスト（論点）" : (mode==="en2ja" ? "単語テスト（英語 → 日本語）" : "単語テスト（日本語 → 英語）");
+
+  let arr, customFrom=Infinity;
+  if(isConcept){
+    arr=allQuiz(); customFrom=QUIZ.length;
+    if(lang==="en"){
+      arr=arr.map(function(q,i){
+        const e = (i<QUIZ.length) ? QUIZ_EN[i] : null;
+        return e ? {q:e.q, opts:e.opts, a:q.a, ex:e.ex} : q;
+      });
+    }
+  } else {
+    if(!wqSet || wqDir!==mode){ wqSet=buildWordQuiz(mode); wqDir=mode; }
+    arr=wqSet;
+  }
+  const total=arr.length;
   document.getElementById("quizScore").style.display="none";
+  if(total===0){
+    document.getElementById("quizList").innerHTML='<p class="muted">単語が足りません。単語帳に4語以上入れてから、もう一度お試しください。</p>';
+    return;
+  }
   let answered=0, correct=0;
-  document.getElementById("quizList").innerHTML=arr.map((q,idx)=>{
-    const isCustom=idx>=QUIZ.length;
-    return `<div class="card"><p class="quiz-q">Q${idx+1}. ${esc(q.q)} ${isCustom?'<span class="pill">自作</span>':''}</p>
-      ${q.opts.map((o,oi)=>`<button class="opt" data-q="${idx}" data-o="${oi}">${esc(o)}</button>`).join("")}
-      <div class="expl" id="ex${idx}" style="display:none">${esc(q.ex||"")}</div>
-      ${isCustom?`<button class="btn ghost" style="margin-top:8px;padding:4px 10px;font-size:12px" onclick="delQuiz(${idx-QUIZ.length})">この問題を削除</button>`:""}
-    </div>`;
+  document.getElementById("quizList").innerHTML=arr.map(function(q,idx){
+    const isCustom = idx>=customFrom;
+    return '<div class="card"><p class="quiz-q">Q'+(idx+1)+'. '+esc(q.q)+' '+(isCustom?'<span class="pill">自作</span>':'')+'</p>'
+      + q.opts.map(function(o,oi){ return '<button class="opt" data-q="'+idx+'" data-o="'+oi+'">'+esc(o)+'</button>'; }).join("")
+      + '<div class="expl" id="ex'+idx+'" style="display:none">'+esc(q.ex||"")+'</div>'
+      + (isCustom?'<button class="btn ghost" style="margin-top:8px;padding:4px 10px;font-size:12px" onclick="delQuiz('+(idx-customFrom)+')">この問題を削除</button>':'')
+      + '</div>';
   }).join("");
-  document.querySelectorAll(".opt").forEach(btn=>{
-    btn.onclick=()=>{
+  document.querySelectorAll(".opt").forEach(function(btn){
+    btn.onclick=function(){
       const qi=+btn.dataset.q, oi=+btn.dataset.o, q=arr[qi];
-      const sibs=document.querySelectorAll(`.opt[data-q="${qi}"]`);
-      if([...sibs].some(s=>s.disabled)) return;
-      sibs.forEach(s=>{ s.disabled=true; if(+s.dataset.o===q.a) s.classList.add("correct"); });
+      const sibs=document.querySelectorAll('.opt[data-q="'+qi+'"]');
+      if([].slice.call(sibs).some(function(x){ return x.disabled; })) return;
+      sibs.forEach(function(x){ x.disabled=true; if(+x.dataset.o===q.a) x.classList.add("correct"); });
       if(oi!==q.a) btn.classList.add("wrong");
       document.getElementById("ex"+qi).style.display="";
       answered++; if(oi===q.a) correct++;
-      if(answered===total){ document.getElementById("scoreText").textContent=`${correct} / ${total} 正解`; document.getElementById("quizScore").style.display=""; }
+      if(answered===total){ document.getElementById("scoreText").textContent=correct+" / "+total+" 正解"; document.getElementById("quizScore").style.display=""; }
     };
   });
 }
+document.querySelectorAll("#quizModeRow button").forEach(function(b){
+  b.onclick=function(){ state.quizMode=b.dataset.qm; save(state); wqSet=null; renderQuiz(); };
+});
+document.querySelectorAll("#quizLangRow button").forEach(function(b){
+  b.onclick=function(){ state.quizLang=b.dataset.ql; save(state); renderQuiz(); };
+});
+document.getElementById("newWordQuiz").onclick=function(){ wqSet=null; renderQuiz(); };
 document.getElementById("retry").onclick=renderQuiz;
 window.delQuiz=function(i){ if(confirm("この問題を削除しますか？")){ state.quizCustom.splice(i,1); save(state); renderQuiz(); } };
 document.getElementById("addQuiz").onclick=()=>{
@@ -1460,6 +1597,8 @@ function applyRemote(remote){
       if(remote.rate!==undefined) state.rate=remote.rate;
       if(remote.autoSpeak!==undefined) state.autoSpeak=remote.autoSpeak;
       if(remote.auto) state.auto=remote.auto;
+      if(remote.quizMode) state.quizMode=remote.quizMode;
+      if(remote.quizLang) state.quizLang=remote.quizLang;
     }
     state.updatedAt = Math.max(state.updatedAt||0, remote.updatedAt||0);
     localStorage.setItem(KEY, JSON.stringify(state));  // 保存（バンプ/再送なし）
@@ -1483,6 +1622,7 @@ async function pushCloud(){
       words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
       askLater: state.askLater||[],
       rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto,
+      quizMode: state.quizMode, quizLang: state.quizLang,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
     setSyncStatus("同期済み ✓ "+new Date().toLocaleTimeString());
