@@ -160,8 +160,23 @@
       <button class="btn ghost" id="modeLater">🔖 後日だけ</button>
       <button class="btn ghost" id="modeAuto">🚶 ながら再生</button>
     </div>
+    <details class="card" id="goalBox" style="margin-bottom:10px;">
+      <summary id="goalSummary">🎯 今日の目標</summary>
+      <p class="muted" style="margin-top:8px;">決めた語数に届いたら切り上げます。電車の中など、時間が決まっている時に。</p>
+      <div class="row" style="align-items:center;">
+        <input type="number" id="goalInput" min="0" max="999" step="10" placeholder="語数" style="width:100px;">
+        <span class="muted">語</span>
+        <button class="btn ghost goal-preset" data-n="20">20</button>
+        <button class="btn ghost goal-preset" data-n="50">50</button>
+        <button class="btn ghost goal-preset" data-n="100">100</button>
+        <button class="btn ghost goal-preset" data-n="200">200</button>
+        <button class="btn ghost" id="goalOff">なし</button>
+      </div>
+      <p class="muted" style="margin-top:8px;">※「まだ」「覚えた」を押した語を数えます。同じ語を何回見ても1語です。日付が変われば自動で0に戻ります。</p>
+    </details>
     <div id="fcWrap">
       <div class="stats" id="fcStats"></div>
+      <div class="progress" id="goalBarWrap" style="display:none;"><span id="goalBar" style="background:var(--amber)"></span></div>
       <div class="progress"><span id="fcBar"></span></div>
       <div class="flash" id="flash"><div class="term">読み込み中…</div></div>
       <div class="row" id="manualBtns" style="margin-top:12px; justify-content:center;">
@@ -180,6 +195,7 @@
         <button class="btn ghost" id="laterClear">解除</button>
       </div>
       <div id="laterStatus" style="text-align:center; font-size:12px; color:var(--amber); margin-top:4px;"></div>
+      <div id="fcExtra" style="margin-top:10px;"></div>
       <div class="row" style="justify-content:center; align-items:center; gap:14px; margin-top:12px; font-size:12px; color:var(--sub);">
         <label><input type="checkbox" id="autoSpeak"> 自動読み上げ</label>
         <label>速度 <input type="range" id="rate" min="0.6" max="1.2" step="0.05" style="width:90px; vertical-align:middle;"></label>
@@ -927,6 +943,7 @@ function normalize(s){
   if(s.autoSpeak===undefined){ s.autoSpeak = true; }
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
   if(!s.deleted){ s.deleted = {}; }   // 削除した単語の記録（他端末で復活させないため）
+  if(s.goal===undefined){ s.goal = 0; }   // 今日の目標語数（0=設定なし）
   if(s.updatedAt===undefined){ s.updatedAt = 0; }
   return s;
 }
@@ -1101,6 +1118,10 @@ const INTERVAL={1:0,2:1,3:3,4:7,5:16};
 const DAY=86400000;
 let cur=null, revealed=false, mode="normal";
 let seen=new Set();
+let goalExtra=0;   // 「もう少し続ける」で上乗せした語数（その場かぎり・保存しない）
+function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+function todayCount(){ const s0=startOfToday(); return state.words.filter(w=>(w.lastStudied||0)>=s0).length; }
+function goalTarget(){ return (state.goal||0)>0 ? (state.goal+goalExtra) : 0; }
 function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
 function laterList(){ return state.words.filter(w=>w.later).sort((a,b)=>(a.laterDue||0)-(b.laterDue||0)); }
 function fmtDate(ts){ const d=new Date(ts); return (d.getMonth()+1)+"/"+d.getDate(); }
@@ -1108,8 +1129,43 @@ function renderStats(){
   const total=state.words.length, due=dueList().length;
   const learned=state.words.filter(w=>w.box>=4).length;
   const later=state.words.filter(w=>w.later).length;
-  document.getElementById("fcStats").innerHTML=`要復習 <b>${due}</b> ／ 🔖後日 <b>${later}</b> ／ 総数 <b>${total}</b> ／ 定着(箱4-5) <b>${learned}</b>`;
+  const done=todayCount(), g=goalTarget();
+  const head = g>0
+    ? `今日 <b>${done}</b>/<b>${g}</b> 語（残り ${Math.max(0,g-done)}） ／ `
+    : `今日 <b>${done}</b> 語 ／ `;
+  document.getElementById("fcStats").innerHTML=head+`要復習 <b>${due}</b> ／ 🔖後日 <b>${later}</b> ／ 定着 <b>${learned}</b>/${total}`;
   document.getElementById("fcBar").style.width=(total?Math.round(learned/total*100):0)+"%";
+  const gw=document.getElementById("goalBarWrap");
+  if(g>0){ gw.style.display=""; document.getElementById("goalBar").style.width=Math.min(100,Math.round(done/g*100))+"%"; }
+  else { gw.style.display="none"; }
+  renderGoalBox();
+}
+function renderGoalBox(){
+  const g=state.goal||0, done=todayCount();
+  const sm=document.getElementById("goalSummary");
+  if(sm) sm.textContent = g>0
+    ? `🎯 今日の目標：${g} 語（あと ${Math.max(0,g+goalExtra-done)} 語）`
+    : "🎯 今日の目標：設定なし（タップして決める）";
+  const inp=document.getElementById("goalInput");
+  if(inp && document.activeElement!==inp) inp.value = g||"";
+}
+function showGoalDone(g){
+  cur=null; revealed=false;
+  document.getElementById("flash").innerHTML=`<div class="term">🎉 目標達成！</div>
+    <div class="muted" style="margin-top:8px;">今日は <b>${todayCount()}</b> 語 学習しました（目標 ${g} 語）。<br>お疲れさまでした。</div>`;
+  document.getElementById("reveal").style.display="none";
+  document.getElementById("speakTerm").style.display="none";
+  document.getElementById("judgeRow").style.display="none";
+  document.getElementById("snoozeRow").style.display="none";
+  document.getElementById("laterStatus").textContent="";
+  document.getElementById("fcExtra").innerHTML=
+    `<span class="muted" style="display:block; margin-bottom:6px;">まだ続けますか？</span>
+     <button class="btn sec goal-more" data-n="10">+10語</button>
+     <button class="btn sec goal-more" data-n="30">+30語</button>
+     <button class="btn ghost goal-more" data-n="999">今日は上限なし</button>`;
+  document.querySelectorAll(".goal-more").forEach(b=>{
+    b.onclick=()=>{ goalExtra+=(+b.dataset.n); renderStats(); nextCard(); };
+  });
 }
 function updateLaterStatus(){
   const el=document.getElementById("laterStatus");
@@ -1122,6 +1178,7 @@ function showCard(w){
   cur=w; revealed=false;
   document.getElementById("flash").innerHTML=`<div class="term">${esc(w.en)}</div><div class="muted" style="margin-top:8px;">タップして答えを見る</div>`;
   document.getElementById("reveal").style.display="";
+  document.getElementById("speakTerm").style.display="";
   document.getElementById("judgeRow").style.display="none";
   document.getElementById("snoozeRow").style.display="";
   updateLaterStatus();
@@ -1143,12 +1200,16 @@ function judge(ok){
   if(ok){ cur.box=Math.min(5,cur.box+1); cur.due=Date.now()+INTERVAL[cur.box]*DAY; }
   else { cur.box=1; cur.due=Date.now(); }
   cur.mtime=Date.now();
+  cur.lastStudied=cur.mtime;   // 今日の学習語数を数えるため
   save(state); nextCard();
 }
 function nextCard(){
   if(mode==="auto"){ renderStats(); return; }
   renderStats(); renderWordTable();
   const sa=document.getElementById("studyAll"); if(sa) sa.remove();
+  document.getElementById("fcExtra").innerHTML="";
+  const gt=goalTarget();
+  if(gt>0 && todayCount()>=gt){ showGoalDone(gt); return; }
   let q;
   if(mode==="later"){ q=laterList().filter(w=>!seen.has((w.en||"").toLowerCase())); }
   else { q=dueList().sort((a,b)=>(a.due||0)-(b.due||0)); }
@@ -1158,6 +1219,7 @@ function nextCard(){
       : "今日の要復習はありません。下のボタンで全単語を復習できます。";
     document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">${msg}</div>`;
     document.getElementById("reveal").style.display="none";
+    document.getElementById("speakTerm").style.display="none";
     document.getElementById("judgeRow").style.display="none";
     document.getElementById("snoozeRow").style.display="none";
     document.getElementById("laterStatus").textContent="";
@@ -1206,6 +1268,17 @@ document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
 function setLater(days){ if(!cur) return; cur.later=true; cur.laterDue=Date.now()+days*DAY; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
 function clearLater(){ if(!cur) return; cur.later=false; delete cur.laterDue; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
 document.querySelectorAll(".later-day").forEach(b=>{ b.onclick=()=>setLater(+b.dataset.days); });
+(function(){
+  const apply=(n)=>{
+    state.goal=Math.max(0,Math.min(999,Math.floor(n)||0));
+    goalExtra=0; save(state); renderStats();
+    if(document.getElementById("cards").classList.contains("active")) nextCard();
+  };
+  const inp=document.getElementById("goalInput");
+  if(inp) inp.onchange=()=>apply(+inp.value||0);
+  document.querySelectorAll(".goal-preset").forEach(b=>{ b.onclick=()=>apply(+b.dataset.n); });
+  const off=document.getElementById("goalOff"); if(off) off.onclick=()=>apply(0);
+})();
 document.getElementById("laterClear").onclick=clearLater;
 (function(){
   const a=document.getElementById("autoSpeak"); a.checked=!!state.autoSpeak;
@@ -1597,6 +1670,7 @@ function applyRemote(remote){
       if(remote.rate!==undefined) state.rate=remote.rate;
       if(remote.autoSpeak!==undefined) state.autoSpeak=remote.autoSpeak;
       if(remote.auto) state.auto=remote.auto;
+      if(remote.goal!==undefined) state.goal=remote.goal;
       if(remote.quizMode) state.quizMode=remote.quizMode;
       if(remote.quizLang) state.quizLang=remote.quizLang;
     }
@@ -1621,7 +1695,7 @@ async function pushCloud(){
     await setDoc(doc(fb.db,"users",fb.user.uid), {
       words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
       askLater: state.askLater||[],
-      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto,
+      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto, goal: state.goal||0,
       quizMode: state.quizMode, quizLang: state.quizLang,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
