@@ -174,6 +174,33 @@
       </div>
       <p class="muted" style="margin-top:8px;">※「まだ」「覚えた」を押した語を数えます。同じ語を何回見ても1語です。日付が変われば自動で0に戻ります。</p>
     </details>
+    <details class="card" id="scopeBox" style="margin-bottom:10px;">
+      <summary id="scopeSummary">📚 出題範囲</summary>
+      <div class="field">
+        <span class="lbl">どの語を出すか</span>
+        <select id="scopeSel">
+          <option value="due">今日の分（復習期限がきた語）</option>
+          <option value="all">覚えた語も含めて全部</option>
+          <option value="learned">覚えた語だけ（箱4-5）</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="lbl">どの順で出すか</span>
+        <select id="orderSel">
+          <option value="smart">おすすめ順（復習期限が近い順）</option>
+          <option value="list">リスト順（◯語目から順番に）</option>
+        </select>
+      </div>
+      <div class="field" id="posRow" style="display:none;">
+        <span class="lbl">開始位置</span>
+        <div class="row" style="align-items:center;">
+          <input type="number" id="posInput" min="1" step="1" style="width:110px;">
+          <span class="muted">語目から</span>
+          <button class="btn ghost" id="posReset">1語目に戻す</button>
+        </div>
+      </div>
+      <p class="muted" id="scopeNote" style="margin-top:8px;"></p>
+    </details>
     <div id="fcWrap">
       <div class="stats" id="fcStats"></div>
       <div class="progress" id="goalBarWrap" style="display:none;"><span id="goalBar" style="background:var(--amber)"></span></div>
@@ -944,6 +971,9 @@ function normalize(s){
   if(!s.auto){ s.auto = {source:"all", gap1:3, gap2:1.5, loop:true, shuffle:false}; }
   if(!s.deleted){ s.deleted = {}; }   // 削除した単語の記録（他端末で復活させないため）
   if(s.goal===undefined){ s.goal = 0; }   // 今日の目標語数（0=設定なし）
+  if(!s.scope){ s.scope = "due"; }        // 出題範囲 due=今日の分 / all=全部 / learned=覚えた語だけ
+  if(!s.order){ s.order = "smart"; }      // 出題順 smart=期限が近い順 / list=リスト順
+  if(s.pos===undefined){ s.pos = 0; }     // リスト順のときの現在位置（0始まり）
   if(s.updatedAt===undefined){ s.updatedAt = 0; }
   return s;
 }
@@ -1123,6 +1153,23 @@ function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTi
 function todayCount(){ const s0=startOfToday(); return state.words.filter(w=>(w.lastStudied||0)>=s0).length; }
 function goalTarget(){ return (state.goal||0)>0 ? (state.goal+goalExtra) : 0; }
 function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
+let orderIdx=-1;   // リスト順で今出している語の位置
+function inScope(w){
+  const sc=state.scope||"due";
+  if(sc==="all") return true;
+  if(sc==="learned") return (w.box||1)>=4;
+  return (w.due||0)<=Date.now();
+}
+function scopeList(){ return state.words.filter(inScope); }
+function nextInOrder(){   // リスト順：開始位置から前へ進み、範囲に合う最初の語を返す
+  const n=state.words.length; if(!n) return null;
+  const start=Math.min(Math.max(0, state.pos|0), n-1);
+  for(let k=0;k<n;k++){
+    const idx=(start+k)%n;
+    if(inScope(state.words[idx])){ orderIdx=idx; return state.words[idx]; }
+  }
+  orderIdx=-1; return null;
+}
 function laterList(){ return state.words.filter(w=>w.later).sort((a,b)=>(a.laterDue||0)-(b.laterDue||0)); }
 function fmtDate(ts){ const d=new Date(ts); return (d.getMonth()+1)+"/"+d.getDate(); }
 function renderStats(){
@@ -1138,7 +1185,24 @@ function renderStats(){
   const gw=document.getElementById("goalBarWrap");
   if(g>0){ gw.style.display=""; document.getElementById("goalBar").style.width=Math.min(100,Math.round(done/g*100))+"%"; }
   else { gw.style.display="none"; }
-  renderGoalBox();
+  renderGoalBox(); renderScopeBox();
+}
+function renderScopeBox(){
+  const sc=state.scope||"due", od=state.order||"smart";
+  const scName={due:"今日の分", all:"覚えた語も含めて全部", learned:"覚えた語だけ"}[sc];
+  const sm=document.getElementById("scopeSummary");
+  if(sm) sm.textContent = od==="list"
+    ? "📚 出題範囲："+scName+"・リスト順（"+((state.pos|0)+1)+" 語目から）"
+    : "📚 出題範囲："+scName;
+  const ss=document.getElementById("scopeSel"); if(ss) ss.value=sc;
+  const os=document.getElementById("orderSel"); if(os) os.value=od;
+  const pr=document.getElementById("posRow"); if(pr) pr.style.display = od==="list" ? "" : "none";
+  const pi=document.getElementById("posInput");
+  if(pi){ pi.max=Math.max(1,state.words.length); if(document.activeElement!==pi) pi.value=(state.pos|0)+1; }
+  const nt=document.getElementById("scopeNote");
+  if(nt) nt.textContent = od==="list"
+    ? "全 "+state.words.length+" 語のうち "+((state.pos|0)+1)+" 語目から順に出します。進めた位置は自動で記憶され、次回はその続きからになります。"
+    : "この範囲に "+scopeList().length+" 語あります。";
 }
 function renderGoalBox(){
   const g=state.goal||0, done=todayCount();
@@ -1201,6 +1265,9 @@ function judge(ok){
   else { cur.box=1; cur.due=Date.now(); }
   cur.mtime=Date.now();
   cur.lastStudied=cur.mtime;   // 今日の学習語数を数えるため
+  if((state.order||"smart")==="list" && orderIdx>=0){
+    state.pos=(orderIdx+1)%Math.max(1,state.words.length);   // 次の語へ進めて記憶する
+  }
   save(state); nextCard();
 }
 function nextCard(){
@@ -1210,13 +1277,24 @@ function nextCard(){
   document.getElementById("fcExtra").innerHTML="";
   const gt=goalTarget();
   if(gt>0 && todayCount()>=gt){ showGoalDone(gt); return; }
-  let q;
-  if(mode==="later"){ q=laterList().filter(w=>!seen.has((w.en||"").toLowerCase())); }
-  else { q=dueList().sort((a,b)=>(a.due||0)-(b.due||0)); }
-  if(q.length===0){
+  let w=null;
+  if(mode==="later"){
+    const q=laterList().filter(x=>!seen.has((x.en||"").toLowerCase()));
+    w=q[0]||null;
+  } else if((state.order||"smart")==="list"){
+    w=nextInOrder();
+  } else {
+    const q=scopeList().sort((a,b)=>(a.due||0)-(b.due||0));
+    w=q[0]||null;
+  }
+  if(!w){
+    const sc=state.scope||"due";
     const msg = mode==="later"
       ? (laterList().length===0 ? "🔖 後日に回した単語はまだありません。" : "🔖 後日の単語はすべて確認しました。")
-      : "今日の要復習はありません。下のボタンで全単語を復習できます。";
+      : sc==="learned"
+        ? (scopeList().length===0 ? "まだ「定着（箱4-5）」の語がありません。何回か復習すると増えます。" : "覚えた語をすべて確認しました。")
+        : sc==="all" ? "全単語を確認しました。"
+        : "今日の分は終わりました。まだ続けるなら、下のボタンで覚えた語も出せます。";
     document.getElementById("flash").innerHTML=`<div class="term">🎉 完了！</div><div class="muted" style="margin-top:8px;">${msg}</div>`;
     document.getElementById("reveal").style.display="none";
     document.getElementById("speakTerm").style.display="none";
@@ -1224,15 +1302,16 @@ function nextCard(){
     document.getElementById("snoozeRow").style.display="none";
     document.getElementById("laterStatus").textContent="";
     cur=null;
-    if(mode==="normal"){
-      const b=document.createElement("button"); b.className="btn sec"; b.id="studyAll";
-      b.textContent="全単語を復習"; b.style.marginTop="10px";
-      b.onclick=()=>{ state.words.forEach(w=>w.due=0); save(state); nextCard(); };
-      document.getElementById("fcWrap").appendChild(b);
+    if(mode==="normal" && (state.scope||"due")==="due"){
+      document.getElementById("fcExtra").innerHTML=
+        '<button class="btn sec" id="scopeAll">覚えた語も含めて復習する</button>';
+      document.getElementById("scopeAll").onclick=()=>{
+        state.scope="all"; save(state); renderScopeBox(); nextCard();
+      };
     }
     return;
   }
-  const w=q[0]; if(mode==="later") seen.add((w.en||"").toLowerCase());
+  if(mode==="later") seen.add((w.en||"").toLowerCase());
   showCard(w);
 }
 function setMode(m){
@@ -1244,6 +1323,7 @@ function setMode(m){
   const isAuto=(m==="auto");
   document.getElementById("autoPanel").style.display=isAuto?"":"none";
   document.getElementById("manualBtns").style.display=isAuto?"none":"";
+  document.getElementById("scopeBox").style.display=(isAuto||m==="later")?"none":"";
   if(isAuto){
     cur=null; revealed=false;
     document.getElementById("reveal").style.display="none";
@@ -1268,6 +1348,21 @@ document.getElementById("speakTerm").onclick=()=>{ if(cur) speak(cur.en); };
 function setLater(days){ if(!cur) return; cur.later=true; cur.laterDue=Date.now()+days*DAY; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
 function clearLater(){ if(!cur) return; cur.later=false; delete cur.laterDue; cur.mtime=Date.now(); save(state); updateLaterStatus(); renderStats(); renderWordTable(); }
 document.querySelectorAll(".later-day").forEach(b=>{ b.onclick=()=>setLater(+b.dataset.days); });
+(function(){
+  const redraw=()=>{ save(state); renderScopeBox(); renderStats();
+    if(document.getElementById("cards").classList.contains("active")) nextCard(); };
+  const ss=document.getElementById("scopeSel");
+  if(ss) ss.onchange=()=>{ state.scope=ss.value; redraw(); };
+  const os=document.getElementById("orderSel");
+  if(os) os.onchange=()=>{ state.order=os.value; redraw(); };
+  const pi=document.getElementById("posInput");
+  if(pi) pi.onchange=()=>{
+    const n=state.words.length||1;
+    state.pos=Math.min(Math.max(1,Math.floor(+pi.value)||1),n)-1; redraw();
+  };
+  const pr=document.getElementById("posReset");
+  if(pr) pr.onclick=()=>{ state.pos=0; redraw(); };
+})();
 (function(){
   const apply=(n)=>{
     state.goal=Math.max(0,Math.min(999,Math.floor(n)||0));
@@ -1671,6 +1766,9 @@ function applyRemote(remote){
       if(remote.autoSpeak!==undefined) state.autoSpeak=remote.autoSpeak;
       if(remote.auto) state.auto=remote.auto;
       if(remote.goal!==undefined) state.goal=remote.goal;
+      if(remote.scope) state.scope=remote.scope;
+      if(remote.order) state.order=remote.order;
+      if(remote.pos!==undefined) state.pos=remote.pos;
       if(remote.quizMode) state.quizMode=remote.quizMode;
       if(remote.quizLang) state.quizLang=remote.quizLang;
     }
@@ -1695,7 +1793,7 @@ async function pushCloud(){
     await setDoc(doc(fb.db,"users",fb.user.uid), {
       words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
       askLater: state.askLater||[],
-      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto, goal: state.goal||0,
+      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto, goal: state.goal||0, scope: state.scope||"due", order: state.order||"smart", pos: state.pos|0,
       quizMode: state.quizMode, quizLang: state.quizLang,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
