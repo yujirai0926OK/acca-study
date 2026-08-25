@@ -116,6 +116,7 @@
   <button data-v="reader" class="active">📖 リーダー</button>
   <button data-v="cards">🗂 単語帳</button>
   <button data-v="quiz">✍️ テスト</button>
+  <button data-v="log">📈 記録</button>
   <button data-v="data">⚙️ データ</button>
 </nav>
 <main>
@@ -320,6 +321,32 @@
         <div class="field"><span class="lbl">解説（任意）</span><input id="qEx" placeholder="なぜその答えか"></div>
         <button class="btn" id="addQuiz">問題を追加</button>
       </details>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section id="log" class="view">
+    <h2 class="vh">学習の記録</h2>
+    <div class="card">
+      <p class="sec-title">これまでの積み上げ<span class="en">日ごとに学習した語数</span></p>
+      <div id="logSummary" class="row" style="gap:14px; flex-wrap:wrap;"></div>
+    </div>
+    <div class="card">
+      <p class="sec-title">直近30日<span class="en">棒が高い日ほどたくさん進んだ日</span></p>
+      <div id="logChart"></div>
+    </div>
+    <div class="card">
+      <p class="sec-title">定着の内訳<span class="en">箱が進むほど覚えている語</span></p>
+      <div id="logBoxes"></div>
+      <p class="muted" style="margin-top:8px;">正解すると箱が1つ進み、次に出るまでの間隔が延びます（箱1→当日、2→1日後、3→3日後、4→7日後、5→16日後）。</p>
+    </div>
+    <div class="card">
+      <p class="sec-title">リスト順の到達位置<span class="en">単語リストのどこまで進んだか</span></p>
+      <div id="logPos"></div>
+    </div>
+    <div class="card">
+      <p class="sec-title">日ごとの記録</p>
+      <div style="overflow-x:auto; max-height:320px;"><table id="logTable"></table></div>
     </div>
   </section>
 
@@ -974,6 +1001,11 @@ function normalize(s){
   if(!s.scope){ s.scope = "due"; }        // 出題範囲 due=今日の分 / all=全部 / learned=覚えた語だけ
   if(!s.order){ s.order = "smart"; }      // 出題順 smart=期限が近い順 / list=リスト順
   if(s.pos===undefined){ s.pos = 0; }     // リスト順のときの現在位置（0始まり）
+  if(!s.history){ s.history = {}; }       // 学習記録 {"YYYY-MM-DD": その日の学習語数}
+  (function(){                            // 400日より古い記録は捨てる
+    const limit=Date.now()-400*86400000;
+    Object.keys(s.history).forEach(k=>{ const t=Date.parse(k); if(!isNaN(t) && t<limit) delete s.history[k]; });
+  })();
   if(s.updatedAt===undefined){ s.updatedAt = 0; }
   return s;
 }
@@ -1008,6 +1040,7 @@ document.querySelectorAll("nav button").forEach(b=>{
     b.classList.add("active");
     document.getElementById(b.dataset.v).classList.add("active");
     if(b.dataset.v==="cards") nextCard();
+    if(b.dataset.v==="log") renderLog();
   };
 });
 
@@ -1154,6 +1187,35 @@ function todayCount(){ const s0=startOfToday(); return state.words.filter(w=>(w.
 function goalTarget(){ return (state.goal||0)>0 ? (state.goal+goalExtra) : 0; }
 function dueList(){ const now=Date.now(); return state.words.filter(w=>(w.due||0)<=now); }
 let orderIdx=-1;   // リスト順で今出している語の位置
+function dateKey(ts){
+  const d=new Date(ts);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function todayKey(){ return dateKey(Date.now()); }
+function recordToday(){          // その日の語数を記録（増える方向にだけ更新）
+  if(!state.history) state.history={};
+  const k=todayKey(), n=todayCount();
+  if((state.history[k]||0)<n) state.history[k]=n;
+}
+function mergeHistory(a,b){      // 端末をまたぐときは同じ日の大きい方を採る
+  const out=Object.assign({}, a||{});
+  Object.keys(b||{}).forEach(k=>{ if(!(out[k]>=b[k])) out[k]=b[k]; });
+  return out;
+}
+function streakDays(){           // 連続で学習した日数
+  const h=state.history||{};
+  const d=new Date(); d.setHours(0,0,0,0);
+  if(!(h[dateKey(d.getTime())]>0)) d.setDate(d.getDate()-1);   // 今日まだなら昨日から数える
+  let n=0;
+  while(h[dateKey(d.getTime())]>0){ n++; d.setDate(d.getDate()-1); }
+  return n;
+}
+function lastNDays(n){
+  const out=[]; const d=new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-(n-1));
+  for(let i=0;i<n;i++){ out.push(dateKey(d.getTime())); d.setDate(d.getDate()+1); }
+  return out;
+}
 function inScope(w){
   const sc=state.scope||"due";
   if(sc==="all") return true;
@@ -1268,6 +1330,7 @@ function judge(ok){
   if((state.order||"smart")==="list" && orderIdx>=0){
     state.pos=(orderIdx+1)%Math.max(1,state.words.length);   // 次の語へ進めて記憶する
   }
+  recordToday();
   save(state); nextCard();
 }
 function nextCard(){
@@ -1530,6 +1593,79 @@ window.toggleLater=function(i){
 };
 document.getElementById("wordSearch").oninput=(e)=>{ wordQuery=e.target.value; if(wordQuery) document.getElementById("listDetails").open=true; renderWordTable(); };
 
+/* ========== 学習の記録 ========== */
+function renderLog(){
+  const h=state.history||{}, keys=Object.keys(h).filter(k=>h[k]>0).sort();
+  const sum=(arr)=>arr.reduce((a,k)=>a+(h[k]||0),0);
+  const total=sum(keys);
+  const week=sum(lastNDays(7)), month=sum(lastNDays(30));
+  const box=(label,val,sub)=>`<div style="flex:1 0 90px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:var(--teal);">${val}</div>
+      <div class="muted" style="font-size:12px;">${esc(label)}</div>
+      ${sub?`<div class="muted" style="font-size:11px;">${esc(sub)}</div>`:""}
+    </div>`;
+  document.getElementById("logSummary").innerHTML=
+    box("今日", h[todayKey()]||0, "語") +
+    box("直近7日", week, "語") +
+    box("直近30日", month, "語") +
+    box("のべ合計", total, "語") +
+    box("学習した日", keys.length, "日") +
+    box("連続", streakDays(), "日");
+
+  // 直近30日の棒グラフ
+  const days=lastNDays(30);
+  const max=Math.max(1, ...days.map(k=>h[k]||0));
+  const bars=days.map(k=>{
+    const v=h[k]||0, pct=Math.round(v/max*100);
+    const d=new Date(k+"T00:00:00");
+    const tip=`${d.getMonth()+1}/${d.getDate()} ${v}語`;
+    return `<div title="${tip}" style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:flex-end; height:110px;">
+      <div style="height:${pct}%; min-height:${v?4:2}px; border-radius:3px 3px 0 0; background:${v?"var(--teal)":"var(--line)"};"></div>
+    </div>`;
+  }).join("");
+  const first=new Date(days[0]+"T00:00:00"), last=new Date(days[days.length-1]+"T00:00:00");
+  document.getElementById("logChart").innerHTML=
+    `<div style="display:flex; gap:2px; align-items:flex-end;">${bars}</div>
+     <div class="row" style="justify-content:space-between; margin-top:6px;">
+       <span class="muted" style="font-size:11px;">${first.getMonth()+1}/${first.getDate()}</span>
+       <span class="muted" style="font-size:11px;">最大 ${max} 語/日</span>
+       <span class="muted" style="font-size:11px;">${last.getMonth()+1}/${last.getDate()}</span>
+     </div>`;
+
+  // 箱ごとの語数
+  const total2=state.words.length||1;
+  const rows=[1,2,3,4,5].map(b=>{
+    const n=state.words.filter(w=>(w.box||1)===b).length;
+    const pct=Math.round(n/total2*100);
+    return `<div style="margin:6px 0;">
+      <div class="row" style="justify-content:space-between;">
+        <span style="font-size:13px;">箱${b}${b>=4?"（定着）":""}</span>
+        <span class="muted" style="font-size:12px;">${n} 語（${pct}%）</span>
+      </div>
+      <div class="progress" style="margin:3px 0 0;"><span style="width:${pct}%; background:${b>=4?"var(--good)":"var(--teal)"}"></span></div>
+    </div>`;
+  }).join("");
+  document.getElementById("logBoxes").innerHTML=rows;
+
+  // リスト順の到達位置
+  const n=state.words.length, pos=Math.min((state.pos|0)+1, Math.max(1,n));
+  const pct=n?Math.round(pos/n*100):0;
+  document.getElementById("logPos").innerHTML=
+    `<p style="margin:0 0 6px; font-size:15px;"><b>${pos}</b> / ${n} 語目（${pct}%）</p>
+     <div class="progress"><span style="width:${pct}%; background:var(--amber)"></span></div>
+     <p class="muted" style="margin-top:8px;">「単語帳」→「📚 出題範囲」を<b>リスト順</b>にしているとき、次はここから出ます。</p>`;
+
+  // 日ごとの一覧（新しい順）
+  const list=keys.slice().reverse();
+  document.getElementById("logTable").innerHTML = list.length
+    ? `<tr><th>日付</th><th>学習した語数</th></tr>` + list.map(k=>{
+        const d=new Date(k+"T00:00:00");
+        const wd="日月火水木金土"[d.getDay()];
+        return `<tr><td>${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${wd}）</td><td><b>${h[k]}</b> 語</td></tr>`;
+      }).join("")
+    : `<tr><td class="muted">まだ記録がありません。単語帳で「まだ」「覚えた」を押すと、その日から記録されます。</td></tr>`;
+}
+
 /* ========== quiz (built-in + custom) ========== */
 function allQuiz(){ return QUIZ.concat(state.quizCustom); }
 let wqSet=null, wqDir=null;
@@ -1697,7 +1833,8 @@ document.getElementById("resetProg").onclick=()=>{
   }
 };
 function refreshAll(){
-  renderStats(); renderWordTable(); renderPassages(); renderQuiz(); renderAsk();
+  renderStats(); renderWordTable(); renderPassages(); renderQuiz();
+  if(document.getElementById("log").classList.contains("active")) renderLog(); renderAsk();
   document.getElementById("dataStat").textContent=`収録 ${state.words.length} 語 ／ 対訳 ${state.passages.length} 件 ／ 自作問題 ${state.quizCustom.length} 問`;
   document.getElementById("passStat").textContent=`この端末の本棚：${state.passages.length} 件`;
 }
@@ -1758,6 +1895,7 @@ function applyRemote(remote){
   const before=state.words.length;
   try{
     state.deleted = mergeDeleted(state.deleted, remote.deleted);
+    state.history = mergeHistory(state.history, remote.history);
     state.words = mergeWords(state.words, remote.words, state.deleted);
     state.quizCustom = mergeQuiz(state.quizCustom, remote.quizCustom);
     state.askLater = mergeAsk(state.askLater, remote.askLater);
@@ -1793,7 +1931,7 @@ async function pushCloud(){
     await setDoc(doc(fb.db,"users",fb.user.uid), {
       words: state.words, quizCustom: state.quizCustom, deleted: state.deleted||{},
       askLater: state.askLater||[],
-      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto, goal: state.goal||0, scope: state.scope||"due", order: state.order||"smart", pos: state.pos|0,
+      rate: state.rate, autoSpeak: state.autoSpeak, auto: state.auto, goal: state.goal||0, history: state.history||{}, scope: state.scope||"due", order: state.order||"smart", pos: state.pos|0,
       quizMode: state.quizMode, quizLang: state.quizLang,
       updatedAt: state.updatedAt||Date.now()
     }, {merge:true});
